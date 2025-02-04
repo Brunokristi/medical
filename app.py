@@ -6,6 +6,9 @@ from reportlab.pdfgen import canvas
 import random
 import datetime
 import os
+import platform
+import re
+
 
 editable_schedule = []
 today = datetime.date.today().strftime("%d/%m/%Y")
@@ -118,13 +121,13 @@ def generate_schedule():
     adresa = entry_adresa.get()
     poistovna = entry_poistovna.get()
 
-    start_date_str = date_start_var.get()  # Get the string value
-    end_date_str = date_end_var.get()      # Get the string value
+    start_date_str = date_start_var.get()
+    end_date_str = date_end_var.get()
     start_time = entry_start_time.get()
     end_time = entry_end_time.get()
     schedule_option = schedule_var.get()
 
-    extra_text = text_extra.get()
+    extra_text = text_extra.get("1.0", "end-1c")
     name_worker = name_worker_extra.get()
 
     if not meno or not rodne_cislo or not adresa or not poistovna or not start_date_str or not end_date_str or not start_time or not end_time or not extra_text or not name_worker:
@@ -242,23 +245,74 @@ def open_preview_window():
     btn_save = tk.Button(btn_frame, text="Generovať PDF", command=save_edits)
     btn_save.pack(side="right", padx=5)
 
+def open_pdf(pdf_path):
+    if platform.system() == "Windows":
+        os.system(f'start "" "{pdf_path}"')  # Windows
+    elif platform.system() == "Darwin":  # macOS
+        os.system(f"open '{pdf_path}'")  # macOS
+    else:
+        messagebox.showinfo("Otvorte manuálne", f"PDF bolo uložené: {pdf_path}")
+
+def sanitize_filename(name):
+    """Removes special characters from filenames to prevent Windows errors."""
+    return re.sub(r'[<>:"/\\|?*]', '', name)
+
 def generate_pdf():
-    """Generates the final PDF from the edited schedule with the correct format."""
     if not editable_schedule:
         messagebox.showwarning("Chyba", "Najskôr vygenerujte a upravte plán.")
         return
 
-    pdf_filename = "generated_schedule.pdf"
-    c = canvas.Canvas(pdf_filename, pagesize=A4)
+    if platform.system() == "Windows":
+        documents_path = os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")
+    else:
+        documents_path = os.path.expanduser("~/Documents/ADOS")
+
+    os.makedirs(documents_path, exist_ok=True)
+
+    # Extract month and year from the first scheduled date
+    first_date = editable_schedule[0][0]  # Get first date (format: 'dd.mm.yyyy')
+    try:
+        parsed_date = datetime.datetime.strptime(first_date, "%d.%m.%Y")
+        month_year = parsed_date.strftime("%m-%Y")  # Convert to MM-YYYY format
+    except ValueError:
+        messagebox.showerror("Chyba", "Neplatný formát dátumu.")
+        return
+
+    # Create a valid filename
+    name = sanitize_filename(entry_meno.get().replace(" ", "_"))
+    pdf_filename = f"{month_year}_{name}.pdf"
+
+    # **Fix: Save file to Documents/ADOS instead of the current directory**
+    pdf_path = os.path.join(documents_path, pdf_filename)
+
+    # Create the PDF
+    c = canvas.Canvas(pdf_path, pagesize=A4)
     width, height = A4
 
+    def replace_slovak_chars(text):
+        """Replaces Slovak characters that might not render correctly in the PDF."""
+        replacements = {
+            "č": "c", "š": "s", "ť": "t", "ž": "z", "ý": "y",
+            "á": "a", "í": "i", "é": "e", "ú": "u", "ľ": "l",
+            "ď": "d", "ň": "n", "ó": "o", "ř": "r", "ě": "e"
+        }
+        return "".join(replacements.get(char, char) for char in text)
+
     def draw_header():
-        """ Draws the patient information at the top of each page. """
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, height - 50, f"Meno: {entry_meno.get()}")
-        c.drawString(250, height - 50, f"Rodné číslo: {entry_rc.get()}")
-        c.drawString(50, height - 70, f"Adresa: {entry_adresa.get()}")
-        c.drawString(250, height - 70, f"Zdravotná poisťovňa: {entry_poistovna.get()}")
+        """Draws patient details at the top of each page."""
+        c.setFont("Helvetica", 12)
+
+        meno = replace_slovak_chars(entry_meno.get())
+        rc = replace_slovak_chars(entry_rc.get())
+        adresa = replace_slovak_chars(entry_adresa.get())
+        poistovna = replace_slovak_chars(entry_poistovna.get())
+
+        c.drawString(50, height - 50, f"Meno: {meno}")
+        c.drawString(250, height - 50, f"Rodné císlo: {rc}")
+        c.drawString(50, height - 70, f"Adresa: {adresa}")
+        c.drawString(250, height - 70, f"Zdravotná poistovna: {poistovna}")
+
+        # Draw separator line
         c.line(50, height - 80, width - 50, height - 80)
 
     draw_header()
@@ -268,14 +322,14 @@ def generate_pdf():
     y_position = height - 110  
 
     for date, time, text in editable_schedule:
-        # Print the extra text (separate for each entry)
-        c.drawString(50, y_position, text)
-        y_position -= 20  
 
-        # Print schedule entry (date, time, worker name)
         c.setFont("Helvetica", 11)
-        c.drawString(50, y_position, f"{date}    {time}    {name_worker_extra.get()}")
-        y_position -= 40
+        c.drawString(50, y_position, f"{date}    {time}    {replace_slovak_chars(name_worker_extra.get())}")
+        y_position -= 40  # Space before next entry
+
+        # Print the extra text (separate for each entry)
+        c.drawString(50, y_position, replace_slovak_chars(text))
+        y_position -= 20  
 
         # Draw separator line
         c.line(50, y_position, width - 50, y_position)
@@ -288,13 +342,14 @@ def generate_pdf():
             y_position = height - 110
 
     c.save()
-    os.system(f"open {pdf_filename}")  # Open PDF on macOS
-    messagebox.showinfo("Úspech", "PDF bolo vygenerované a otvorené.")
+    open_pdf(pdf_path)
+
+
 
 # GUI Setup
 root = tk.Tk()
 root.title("Formulár na tlač")
-root.geometry("450x750")
+root.geometry("450x850")
 
 tk.Label(root, text="Pacient", font=("Arial", 12, "bold")).pack(pady=(10, 2))
 ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=5)
@@ -356,8 +411,8 @@ tk.Label(root, text="Informácie", font=("Arial", 12, "bold")).pack(pady=(15, 2)
 ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=5)
 
 tk.Label(root, text="Doplnkový text:").pack()
-text_extra = tk.Entry(root, width=40)
-text_extra.pack()
+text_extra = tk.Text(root, height=10, width=50, wrap="word") 
+text_extra.pack(padx=10, pady=5)
 
 tk.Label(root, text="Meno vypĺňajúceho:").pack()
 name_worker_extra = tk.Entry(root, width=40)
