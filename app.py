@@ -8,6 +8,7 @@ import datetime
 import os
 import platform
 import re
+import csv
 
 
 editable_schedule = []
@@ -95,7 +96,82 @@ def time_change(entry_widget, entry_var):
 
     entry_widget.icursor(new_position)
 
+def save_patient_data():
+    meno = entry_meno.get().strip()
+    rodne_cislo = entry_rc.get().strip()
+    adresa = entry_adresa.get().strip()
+    poistovna = entry_poistovna.get().strip()
 
+    if platform.system() == "Windows":
+        documents_path = os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")  # Windows path
+    else:
+        documents_path = os.path.expanduser("~/Documents/ADOS")
+    
+    os.makedirs(documents_path, exist_ok=True)
+    csv_file = os.path.join(documents_path, "pacienti_databaza.csv")
+
+    patients = []
+    file_exists = os.path.isfile(csv_file)
+    updated = False
+
+    if file_exists:
+        with open(csv_file, mode="r", encoding="utf-8") as file:
+            reader = csv.reader(file)
+            header = next(reader, None)  # Read header
+            for row in reader:
+                if len(row) >= 2:  # Ensure valid row
+                    if row[1] == rodne_cislo:  # If Rodné číslo matches, update data
+                        row[0] = meno
+                        row[2] = adresa
+                        row[3] = poistovna
+                        updated = True
+                    patients.append(row)
+
+    # If patient not found, add new entry
+    if not updated:
+        patients.append([meno, rodne_cislo, adresa, poistovna])
+
+    # Write updated data back to CSV
+    with open(csv_file, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Meno", "Rodné číslo", "Adresa", "Zdravotná poisťovňa"])  # Write header
+        writer.writerows(patients)
+
+def save_entry_data():
+    rodne_cislo = entry_rc.get().strip()
+    start_date_str = date_start.get_date().strftime("%d/%m/%Y")
+    extra_text = text_extra.get("1.0", "end-1c").strip()
+
+    if not rodne_cislo or not start_date_str or not extra_text:
+        messagebox.showwarning("Chyba", "Vyplňte všetky povinné polia.")
+        return
+
+    # Extract Month & Year from start_date
+    try:
+        start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y")
+        month_year = start_date.strftime("%m/%Y")  # Format as MM/YYYY
+    except ValueError:
+        messagebox.showwarning("Chyba", "Neplatný formát dátumu.")
+        return
+
+    # Define path to CSV file
+    if platform.system() == "Windows":
+        documents_path = os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")  # Windows path
+    else:
+        documents_path = os.path.expanduser("~/Documents/ADOS")  # macOS/Linux path
+    
+    os.makedirs(documents_path, exist_ok=True)  # Ensure folder exists
+    csv_file = os.path.join(documents_path, "nalezy_databaza.csv")
+
+    # Check if the file exists to add a header
+    file_exists = os.path.isfile(csv_file)
+
+    # Write to CSV
+    with open(csv_file, mode="a", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        if not file_exists:
+            writer.writerow(["Rodné číslo", "Dátum (Mesiac/Rok)", "Nález"])  # Header row
+        writer.writerow([rodne_cislo, month_year, extra_text])
 
 def random_time(start_time, end_time):
     start_hour, start_minute = start_time.hour, start_time.minute
@@ -112,7 +188,6 @@ def random_time(start_time, end_time):
     return f"{random_hour:02d}:{random_minute:02d}"
 
 def generate_schedule():
-    """Generates the list of scheduled dates with random times and opens a preview window."""
     global editable_schedule
     editable_schedule = []
 
@@ -121,8 +196,8 @@ def generate_schedule():
     adresa = entry_adresa.get()
     poistovna = entry_poistovna.get()
 
-    start_date_str = date_start_var.get()
-    end_date_str = date_end_var.get()
+    start_date = date_start.get_date()
+    end_date = date_end.get_date()
     start_time = entry_start_time.get()
     end_time = entry_end_time.get()
     schedule_option = schedule_var.get()
@@ -130,17 +205,10 @@ def generate_schedule():
     extra_text = text_extra.get("1.0", "end-1c")
     name_worker = name_worker_extra.get()
 
-    if not meno or not rodne_cislo or not adresa or not poistovna or not start_date_str or not end_date_str or not start_time or not end_time or not extra_text or not name_worker:
+    if not meno or not rodne_cislo or not adresa or not poistovna or not start_date or not end_date or not start_time or not end_time or not extra_text or not name_worker:
         messagebox.showwarning("Chyba", "Prosím, vyplňte všetky povinné polia.")
         return
 
-    # Convert date strings to datetime.date objects
-    try:
-        start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y").date()
-        end_date = datetime.datetime.strptime(end_date_str, "%d/%m/%Y").date()
-    except ValueError:
-        messagebox.showwarning("Chyba", "Dátumy musia byť vo formáte DD/MM/YYYY.")
-        return
 
     # Convert time strings to datetime.time objects
     try:
@@ -169,6 +237,8 @@ def generate_schedule():
         messagebox.showwarning("Chyba", "Neboli vygenerované žiadne dátumy.")
         return
 
+    save_patient_data()
+    save_entry_data()
     open_preview_window()
 
 def open_preview_window():
@@ -344,79 +414,219 @@ def generate_pdf():
     c.save()
     open_pdf(pdf_path)
 
+def find_patient_data():
+    rodne_cislo = entry_rc.get().strip()
+
+    if not rodne_cislo:
+        messagebox.showwarning("Chyba", "Zadajte rodné číslo pacienta.")
+        return
+
+    if platform.system() == "Windows":
+        documents_path = os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")  # Windows path
+    else:
+        documents_path = os.path.expanduser("~/Documents/ADOS")
+
+    csv_file = os.path.join(documents_path, "pacienti_databaza.csv")
+
+    if not os.path.isfile(csv_file):
+        messagebox.showwarning("Chyba", "Databáza pacientov neexistuje.")
+        return
+
+    # Search for patient in CSV
+    with open(csv_file, mode="r", encoding="utf-8") as file:
+        reader = csv.reader(file)
+        next(reader, None)  # Skip header
+        for row in reader:
+            if len(row) >= 2 and row[1] == rodne_cislo:
+                # Populate fields with found data
+                entry_meno.delete(0, tk.END)
+                entry_meno.insert(0, row[0])
+
+                entry_adresa.delete(0, tk.END)
+                entry_adresa.insert(0, row[2])
+
+                entry_poistovna.delete(0, tk.END)
+                entry_poistovna.insert(0, row[3])
+
+                return
+    
+    messagebox.showwarning("Chyba", "Pacient s týmto rodným číslom nebol nájdený.")
+
+def open_records_window():
+    """Opens a new window with all records for a given Rodné číslo, sorted by date."""
+    
+    rodne_cislo = entry_rc.get().strip()
+    
+    if not rodne_cislo:
+        messagebox.showwarning("Chyba", "Zadajte rodné číslo pacienta.")
+        return
+
+    # Define the file path
+    if platform.system() == "Windows":
+        documents_path = os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")
+    else:
+        documents_path = os.path.expanduser("~/Documents/ADOS")
+    
+    csv_file = os.path.join(documents_path, "nalezy_databaza.csv")
+
+    if not os.path.isfile(csv_file):
+        messagebox.showwarning("Chyba", "Databáza záznamov neexistuje.")
+        return
+
+    # Read and filter records
+    records = []
+    with open(csv_file, mode="r", encoding="utf-8") as file:
+        reader = csv.reader(file)
+        next(reader, None)  # Skip header
+        for row in reader:
+            if len(row) >= 3 and row[0] == rodne_cislo:
+                try:
+                    date_obj = datetime.datetime.strptime(row[1], "%m/%Y")  # Convert to date object
+                    records.append((date_obj, row[1], row[2]))  # Store as (date_obj, formatted date, text)
+                except ValueError:
+                    continue  # Skip invalid rows
+
+    if not records:
+        messagebox.showwarning("Chyba", "Pre toto rodné číslo neboli nájdené žiadne záznamy.")
+        return
+
+    # Sort records by date (oldest to newest)
+    records.sort(key=lambda x: x[0])
+
+    # Create a new window
+    records_win = tk.Toplevel(root)
+    records_win.title(f"Záznamy pre {rodne_cislo}")
+    records_win.geometry("500x400")
+
+    # Scrollable Frame
+    container = tk.Frame(records_win)
+    canvas = tk.Canvas(container)
+    scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas)
+
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(
+            scrollregion=canvas.bbox("all")
+        )
+    )
+
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    container.pack(fill="both", expand=True)
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    # Create headers
+    tk.Label(scrollable_frame, text="Dátum (Mesiac/Rok)", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=10, pady=5, sticky="w")
+    tk.Label(scrollable_frame, text="Nález", font=("Arial", 10, "bold")).grid(row=0, column=1, padx=10, pady=5, sticky="w")
+
+    # Add records to the window
+    for i, (_, date, text) in enumerate(records, start=1):
+        tk.Label(scrollable_frame, text=date).grid(row=i, column=0, padx=10, pady=2, sticky="w")
+        tk.Label(scrollable_frame, text=text, wraplength=300, justify="left").grid(row=i, column=1, padx=10, pady=2, sticky="w")
+
+
 
 
 # GUI Setup
 root = tk.Tk()
-root.title("Formulár na tlač")
-root.geometry("450x850")
+root.title("ADOS")
+root.geometry("700x630")
 
-tk.Label(root, text="Pacient", font=("Arial", 12, "bold")).pack(pady=(10, 2))
-ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=5)
+# Create a Frame for the form
+form_frame = tk.Frame(root)
+form_frame.pack(pady=10, padx=10, fill="x")
 
-# Inputs
-tk.Label(root, text="Meno:").pack()
-entry_meno = tk.Entry(root, width=40)
-entry_meno.pack()
+# Meno
+tk.Label(form_frame, text="Meno:", width=20, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+entry_meno = tk.Entry(form_frame, width=40)
+entry_meno.grid(row=0, column=1, padx=5, pady=5)
 
-tk.Label(root, text="Rodné číslo:").pack()
+# Rodné číslo
+tk.Label(form_frame, text="Rodné číslo:", width=20, anchor="e").grid(row=1, column=0, padx=5, pady=5)
+
+# Frame for Entry + Button (inside the same grid row)
+rc_frame = tk.Frame(form_frame)
+rc_frame.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+
 rc_var = tk.StringVar()
-entry_rc = tk.Entry(root, textvariable=rc_var, width=40)
-entry_rc.pack()
-entry_rc.bind("<KeyRelease>", lambda event: rc_change(entry_rc, rc_var))  # Format input dynamically
+entry_rc = tk.Entry(rc_frame, textvariable=rc_var, width=30)
+entry_rc.pack(side="left", padx=(0, 5))
+entry_rc.bind("<KeyRelease>", lambda event: rc_change(entry_rc, rc_var))
 
-tk.Label(root, text="Adresa:").pack()
-entry_adresa = tk.Entry(root, width=40)
-entry_adresa.pack()
+# Find Patient Button inside the same field
+btn_search = tk.Button(rc_frame, text="Hľadať", command=find_patient_data)
+btn_search.pack(side="left")
 
-tk.Label(root, text="Zdravotná poisťovňa:").pack()
-entry_poistovna = tk.Entry(root, width=40)
-entry_poistovna.pack()
+# Adresa
+tk.Label(form_frame, text="Adresa:", width=20, anchor="e").grid(row=2, column=0, padx=5, pady=5)
+entry_adresa = tk.Entry(form_frame, width=40)
+entry_adresa.grid(row=2, column=1, padx=5, pady=5)
 
-tk.Label(root, text="Výber dátumu a času", font=("Arial", 12, "bold")).pack(pady=(15, 2))
+# Zdravotná poisťovňa
+tk.Label(form_frame, text="Zdravotná poisťovňa:", width=20, anchor="e").grid(row=3, column=0, padx=5, pady=5)
+entry_poistovna = tk.Entry(form_frame, width=40)
+entry_poistovna.grid(row=3, column=1, padx=5, pady=5)
+
+
 ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=5)
 
-tk.Label(root, text="Začiatok:").pack()
-date_start_var = tk.StringVar(value=today)  # Pre-fill today's date
-entry_start = tk.Entry(root, textvariable=date_start_var, width=15)
-entry_start.pack()
-entry_start.bind("<KeyRelease>", lambda event: date_change(entry_start, date_start_var))  # Format input dynamically
+# Frame for Date & Time Selection
+datetime_frame = tk.Frame(root)
+datetime_frame.pack(pady=10, padx=10, fill="x")
 
-tk.Label(root, text="Koniec:").pack()
-date_end_var = tk.StringVar(value=today)  # Pre-fill today's date
-entry_end = tk.Entry(root, textvariable=date_end_var, width=15)
-entry_end.pack()
-entry_end.bind("<KeyRelease>", lambda event: date_change(entry_end, date_end_var))  # Format input dynamically
+# Začiatok (Start Date)
+tk.Label(datetime_frame, text="Začiatok:", width=20, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+date_start = DateEntry(datetime_frame, width=15, background="grey", foreground="black", borderwidth=2, date_pattern="dd/MM/yyyy")
+date_start.grid(row=0, column=1, padx=5, pady=5)
 
-tk.Label(root, text="Odkedy (hh:mm):").pack()
+# Koniec (End Date)
+tk.Label(datetime_frame, text="Koniec:", width=20, anchor="e").grid(row=1, column=0, padx=5, pady=5)
+date_end = DateEntry(datetime_frame, width=15, background="grey", foreground="black", borderwidth=2, date_pattern="dd/MM/yyyy")
+date_end.grid(row=1, column=1, padx=5, pady=5)
+
+# Odkedy (Start Time)
+tk.Label(datetime_frame, text="Odkedy (hh:mm):", width=20, anchor="e").grid(row=2, column=0, padx=5, pady=5)
 start_time_var = tk.StringVar(value="08:00")  # Default to 08:00
-entry_start_time = tk.Entry(root, textvariable=start_time_var, width=15)
-entry_start_time.pack()
-entry_start_time.bind("<KeyRelease>", lambda event: time_change(entry_start_time, start_time_var))  # Format input dynamically
+entry_start_time = tk.Entry(datetime_frame, textvariable=start_time_var, width=15)
+entry_start_time.grid(row=2, column=1, padx=5, pady=5)
+entry_start_time.bind("<KeyRelease>", lambda event: time_change(entry_start_time, start_time_var))
 
-# End Time
-tk.Label(root, text="Dokedy (hh:mm):").pack()
+# Dokedy (End Time)
+tk.Label(datetime_frame, text="Dokedy (hh:mm):", width=20, anchor="e").grid(row=3, column=0, padx=5, pady=5)
 end_time_var = tk.StringVar(value="13:00")  # Default to 13:00
-entry_end_time = tk.Entry(root, textvariable=end_time_var, width=15)
-entry_end_time.pack()
-entry_end_time.bind("<KeyRelease>", lambda event: time_change(entry_end_time, end_time_var))  # Format input dynamically
+entry_end_time = tk.Entry(datetime_frame, textvariable=end_time_var, width=15)
+entry_end_time.grid(row=3, column=1, padx=5, pady=5)
+entry_end_time.bind("<KeyRelease>", lambda event: time_change(entry_end_time, end_time_var))
 
-tk.Label(root, text="Opakovanie:").pack()
+# Opakovanie (Repetition)
+tk.Label(datetime_frame, text="Opakovanie:", width=20, anchor="e").grid(row=4, column=0, padx=5, pady=5)
 schedule_var = tk.StringVar(value="Každý deň")
 schedule_options = ["Každý deň", "Každý pracovný deň", "3x v týždni"]
-schedule_dropdown = ttk.Combobox(root, textvariable=schedule_var, values=schedule_options, width=15)
-schedule_dropdown.pack()
+schedule_dropdown = ttk.Combobox(datetime_frame, textvariable=schedule_var, values=schedule_options, width=15)
+schedule_dropdown.grid(row=4, column=1, padx=5, pady=5)
 
-tk.Label(root, text="Informácie", font=("Arial", 12, "bold")).pack(pady=(15, 2))
+
 ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=5)
 
-tk.Label(root, text="Doplnkový text:").pack()
-text_extra = tk.Text(root, height=10, width=50, wrap="word") 
-text_extra.pack(padx=10, pady=5)
+worker_frame = tk.Frame(root)
+worker_frame.pack(pady=5, fill="x")
+tk.Label(worker_frame, text="Meno vypĺňajúceho:", width=20, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+name_worker_extra = tk.Entry(worker_frame, width=40)
+name_worker_extra.grid(row=0, column=1, padx=5, pady=5)
 
-tk.Label(root, text="Meno vypĺňajúceho:").pack()
-name_worker_extra = tk.Entry(root, width=40)
-name_worker_extra.pack()
+# Frame for "Nález" Input
+finding_frame = tk.Frame(root)
+finding_frame.pack(pady=5, fill="x")
+tk.Label(finding_frame, text="Nález:", width=20, anchor="ne").grid(row=0, column=0, padx=5, pady=5, sticky="ne")
+text_extra = tk.Text(finding_frame, height=5, width=50, wrap="word")
+text_extra.grid(row=0, column=1, padx=5, pady=5)
+
+
+tk.Button(root, text="Zobraziť nálezy pacienta", command=open_records_window).pack(pady=5)
+
 
 tk.Button(root, text="Náhľad rozvrhu", command=generate_schedule).pack(pady=10)
 
