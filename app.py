@@ -3,6 +3,8 @@ from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.lib.utils import simpleSplit
 import random
 import datetime
 import os
@@ -200,36 +202,37 @@ def generate_schedule():
     end_date = date_end.get_date()
     start_time = entry_start_time.get()
     end_time = entry_end_time.get()
+    write_start_time = write_entry_start_time.get()
+    write_end_time = write_entry_end_time.get()
     schedule_option = schedule_var.get()
 
     extra_text = text_extra.get("1.0", "end-1c")
     name_worker = name_worker_extra.get()
 
-    if not meno or not rodne_cislo or not adresa or not poistovna or not start_date or not end_date or not start_time or not end_time or not extra_text or not name_worker:
+    if not meno or not rodne_cislo or not adresa or not poistovna or not start_date or not end_date or not start_time or not end_time or not extra_text or not name_worker or not write_start_time or not write_end_time:
         messagebox.showwarning("Chyba", "Prosím, vyplňte všetky povinné polia.")
         return
 
-
-    # Convert time strings to datetime.time objects
     try:
         start_time_dt = datetime.datetime.strptime(start_time, "%H:%M").time()
         end_time_dt = datetime.datetime.strptime(end_time, "%H:%M").time()
+        write_start_time_dt = datetime.datetime.strptime(write_start_time, "%H:%M").time()
+        write_end_time_dt = datetime.datetime.strptime(write_end_time, "%H:%M").time()
     except ValueError:
         messagebox.showwarning("Chyba", "Čas musí byť vo formáte HH:MM (napr. 08:30).")
         return
-
-    # Generate scheduled dates based on user input
+    
     current_date = start_date
     while current_date <= end_date:
         weekday = current_date.weekday()  # Monday = 0, Sunday = 6
 
         if schedule_option == "Každý deň":
-            editable_schedule.append([current_date.strftime('%d.%m.%Y'), random_time(start_time_dt, end_time_dt), extra_text])
+            editable_schedule.append([current_date.strftime('%d.%m.%Y'), random_time(start_time_dt, end_time_dt), random_time(write_start_time_dt, write_end_time_dt), extra_text])
         elif schedule_option == "Každý pracovný deň" and weekday < 5:
-            editable_schedule.append([current_date.strftime('%d.%m.%Y'), random_time(start_time_dt, end_time_dt), extra_text])
+            editable_schedule.append([current_date.strftime('%d.%m.%Y'), random_time(start_time_dt, end_time_dt), random_time(write_start_time_dt, write_end_time_dt), extra_text])
         elif schedule_option == "3x v týždni":
             if weekday in [0, 2, 4]:
-                editable_schedule.append([current_date.strftime('%d.%m.%Y'), random_time(start_time_dt, end_time_dt), extra_text])
+                editable_schedule.append([current_date.strftime('%d.%m.%Y'), random_time(start_time_dt, end_time_dt), random_time(write_start_time_dt, write_end_time_dt), extra_text])
 
         current_date += datetime.timedelta(days=1)
 
@@ -241,21 +244,22 @@ def generate_schedule():
     save_entry_data()
     open_preview_window()
 
+    # Generate scheduled dates based on user input
+
 def open_preview_window():
-    """Opens a preview window with an editable schedule table."""
     preview_win = tk.Toplevel(root)
     preview_win.title("Náhľad rozvrhu")
-    preview_win.geometry("600x400")
+    preview_win.geometry("700x400")
 
-    # Table
-    columns = ("Dátum", "Čas", "Text")
+    # Table with an extra column for Write Time
+    columns = ("Dátum", "Čas ZS", "Čas Zápisu", "Text")
     tree = ttk.Treeview(preview_win, columns=columns, show="headings", height=15)
 
     for col in columns:
         tree.heading(col, text=col)
-        tree.column(col, width=180)
+        tree.column(col, width=160)  # Adjust width for better visibility
 
-    # Insert data
+    # Insert data (including Write Time)
     for row in editable_schedule:
         tree.insert("", "end", values=row)
 
@@ -266,10 +270,10 @@ def open_preview_window():
         selected_item = tree.selection()
         if not selected_item:
             return
-        
+
         item = selected_item[0]
         col_id = tree.identify_column(event.x)  # Get clicked column (e.g., #1, #2, #3)
-        col_index = int(col_id[1:]) - 1  # Convert column ID to index (0=Date, 1=Time, 2=Text)
+        col_index = int(col_id[1:]) - 1  # Convert column ID to index (0=Date, 1=Time, 2=Write Time, 3=Text)
 
         x, y, width, height = tree.bbox(item, col_index)  # Get cell position
         value = tree.item(item, "values")[col_index]  # Get current value
@@ -290,7 +294,7 @@ def open_preview_window():
         entry_edit.bind("<Return>", save_edit)
         entry_edit.bind("<FocusOut>", lambda event: entry_edit.destroy())  # Remove entry if user clicks away
 
-    tree.bind("<Double-1>", on_double_click)  # Bind double-click to enable editing
+    tree.bind("<Double-1>", on_double_click)  # Enable in-place editing
 
     def delete_selected():
         selected_items = tree.selection()
@@ -358,6 +362,7 @@ def generate_pdf():
     # Create the PDF
     c = canvas.Canvas(pdf_path, pagesize=A4)
     width, height = A4
+    page_number = 1
 
     def replace_slovak_chars(text):
         """Replaces Slovak characters that might not render correctly in the PDF."""
@@ -369,39 +374,65 @@ def generate_pdf():
         return "".join(replacements.get(char, char) for char in text)
 
     def draw_header():
-        """Draws patient details at the top of each page."""
-        c.setFont("Helvetica", 12)
+        """Draws patient details at the top of each page to match the format."""
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(180, height - 40, replace_slovak_chars("DEKURZ OSETROVATELSKEJ STAROSTLIVOSTI"))
 
-        meno = replace_slovak_chars(entry_meno.get())
-        rc = replace_slovak_chars(entry_rc.get())
-        adresa = replace_slovak_chars(entry_adresa.get())
-        poistovna = replace_slovak_chars(entry_poistovna.get())
+        c.setFont("Helvetica", 10)
+        c.drawString(50, height - 60, replace_slovak_chars("Andramed, o.z."))
+        c.drawString(50, height - 75, replace_slovak_chars("SNP 8, 98601 Fiľakovo"))
+        c.drawString(50, height - 90, replace_slovak_chars("ADOS"))
 
-        c.drawString(50, height - 50, f"Meno: {meno}")
-        c.drawString(250, height - 50, f"Rodné císlo: {rc}")
-        c.drawString(50, height - 70, f"Adresa: {adresa}")
-        c.drawString(250, height - 70, f"Zdravotná poistovna: {poistovna}")
+        # Line Separator
+        c.line(50, height - 100, width - 50, height - 100)
 
-        # Draw separator line
-        c.line(50, height - 80, width - 50, height - 80)
+        # Patient Information
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(50, height - 120, replace_slovak_chars("Meno, priezvisko, titul pacienta/pacientky:"))
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, height - 150, entry_meno.get())
+
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(350, height - 120, replace_slovak_chars("Rodné číslo:"))
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(350, height - 150, entry_rc.get())
+
+        # Line Separator
+        c.line(50, height - 160, width - 50, height - 160)
+
+        # Table Header
+        c.setFont("Helvetica-Bold", 10)
+
+    def draw_footer(page_num):
+        c.setFont("Helvetica", 10)
+        c.drawRightString(width - 50, 30, f"Strana {page_num}") 
 
     draw_header()
-    c.setFont("Helvetica", 11)
+    c.setFont("Helvetica", 10)
 
     # Start position for text
-    y_position = height - 110  
+    y_position = height - 180  
 
-    for date, time, text in editable_schedule:
+    for date, zs_time, write_time, text in editable_schedule:
+        c.setFont("Helvetica", 10)
+        c.drawString(50, y_position, replace_slovak_chars(f'Dátum a čas zápisu: {date},  {write_time}'))
+        y_position -= 30
 
-        c.setFont("Helvetica", 11)
-        c.drawString(50, y_position, f"{date}    {time}    {replace_slovak_chars(name_worker_extra.get())}")
-        y_position -= 40  # Space before next entry
+        # Wrap text
+        text_lines = simpleSplit(replace_slovak_chars(f'{zs_time}: {text}'), "Helvetica", 10, width - 100)
+        for line in text_lines:
+            c.drawString(50, y_position, line)
+            y_position -= 15
 
-        # Print the extra text (separate for each entry)
-        c.drawString(50, y_position, replace_slovak_chars(text))
-        y_position -= 20  
+        # Nurse's Signature
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(50, y_position, name_worker_extra.get())
+        c.setFont("Helvetica", 10)
+        c.drawString(200, y_position, "Podpis:")
+        y_position -= 15
 
         # Draw separator line
+        c.setStrokeColor(colors.black)
         c.line(50, y_position, width - 50, y_position)
         y_position -= 20
 
@@ -409,7 +440,9 @@ def generate_pdf():
         if y_position < 50:
             c.showPage()
             draw_header()
-            y_position = height - 110
+            y_position = height - 180
+
+    draw_footer(page_number)
 
     c.save()
     open_pdf(pdf_path)
@@ -533,7 +566,7 @@ def open_records_window():
 # GUI Setup
 root = tk.Tk()
 root.title("ADOS")
-root.geometry("700x630")
+root.geometry("800x600")
 
 # Create a Frame for the form
 form_frame = tk.Frame(root)
@@ -583,23 +616,36 @@ date_start = DateEntry(datetime_frame, width=15, background="grey", foreground="
 date_start.grid(row=0, column=1, padx=5, pady=5)
 
 # Koniec (End Date)
-tk.Label(datetime_frame, text="Koniec:", width=20, anchor="e").grid(row=1, column=0, padx=5, pady=5)
+tk.Label(datetime_frame, text="Koniec:", width=20, anchor="e").grid(row=0, column=2, padx=5, pady=5)
 date_end = DateEntry(datetime_frame, width=15, background="grey", foreground="black", borderwidth=2, date_pattern="dd/MM/yyyy")
-date_end.grid(row=1, column=1, padx=5, pady=5)
+date_end.grid(row=0, column=3, padx=5, pady=5)
 
-# Odkedy (Start Time)
-tk.Label(datetime_frame, text="Odkedy (hh:mm):", width=20, anchor="e").grid(row=2, column=0, padx=5, pady=5)
-start_time_var = tk.StringVar(value="08:00")  # Default to 08:00
-entry_start_time = tk.Entry(datetime_frame, textvariable=start_time_var, width=15)
+# Čas poskytnutia ZS (Medical Service Time)
+tk.Label(datetime_frame, text="Čas poskytnutia ZS od:", width=20, anchor="e").grid(row=2, column=0, padx=5, pady=5)
+zs_start_time_var = tk.StringVar(value="08:00")
+entry_start_time = tk.Entry(datetime_frame, textvariable=zs_start_time_var, width=15)
 entry_start_time.grid(row=2, column=1, padx=5, pady=5)
-entry_start_time.bind("<KeyRelease>", lambda event: time_change(entry_start_time, start_time_var))
+entry_start_time.bind("<KeyRelease>", lambda event: time_change(entry_start_time, zs_start_time_var))
 
-# Dokedy (End Time)
-tk.Label(datetime_frame, text="Dokedy (hh:mm):", width=20, anchor="e").grid(row=3, column=0, padx=5, pady=5)
-end_time_var = tk.StringVar(value="13:00")  # Default to 13:00
-entry_end_time = tk.Entry(datetime_frame, textvariable=end_time_var, width=15)
-entry_end_time.grid(row=3, column=1, padx=5, pady=5)
-entry_end_time.bind("<KeyRelease>", lambda event: time_change(entry_end_time, end_time_var))
+tk.Label(datetime_frame, text="Čas poskytnutia ZS do:", width=20, anchor="e").grid(row=2, column=2, padx=5, pady=5)
+zs_end_time_var = tk.StringVar(value="13:00")
+entry_end_time = tk.Entry(datetime_frame, textvariable=zs_end_time_var, width=15)
+entry_end_time.grid(row=2, column=3, padx=5, pady=5)
+entry_end_time.bind("<KeyRelease>", lambda event: time_change(entry_end_time, zs_end_time_var))
+
+# Čas zápisu (Write Time)
+tk.Label(datetime_frame, text="Čas zápisu od:", width=20, anchor="e").grid(row=3, column=0, padx=5, pady=5)
+write_start_time_var = tk.StringVar(value="13:00")
+write_entry_start_time = tk.Entry(datetime_frame, textvariable=write_start_time_var, width=15)
+write_entry_start_time.grid(row=3, column=1, padx=5, pady=5)
+write_entry_start_time.bind("<KeyRelease>", lambda event: time_change(write_entry_start_time, write_start_time_var))
+
+tk.Label(datetime_frame, text="Čas zápisu do:", width=20, anchor="e").grid(row=3, column=2, padx=5, pady=5)
+write_end_time_var = tk.StringVar(value="15:00")
+write_entry_end_time = tk.Entry(datetime_frame, textvariable=write_end_time_var, width=15)
+write_entry_end_time.grid(row=3, column=3, padx=5, pady=5)
+write_entry_end_time.bind("<KeyRelease>", lambda event: time_change(write_entry_end_time, write_end_time_var))
+
 
 # Opakovanie (Repetition)
 tk.Label(datetime_frame, text="Opakovanie:", width=20, anchor="e").grid(row=4, column=0, padx=5, pady=5)
