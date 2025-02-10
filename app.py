@@ -16,6 +16,8 @@ import csv
 editable_schedule = []
 today = datetime.date.today().strftime("%d/%m/%Y")
 
+def validate_number_input(P):
+    return P.isdigit() or P == ""
 
 def date_change(entry_widget, entry_var):
     text = entry_var.get().replace("/", "")
@@ -103,6 +105,8 @@ def save_patient_data():
     rodne_cislo = entry_rc.get().strip()
     adresa = entry_adresa.get().strip()
     poistovna = entry_poistovna.get().strip()
+    ados = company_selection.get().strip()
+    osetrujuci = name_worker_extra.get().strip()
 
     if platform.system() == "Windows":
         documents_path = os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")  # Windows path
@@ -126,17 +130,19 @@ def save_patient_data():
                         row[0] = meno
                         row[2] = adresa
                         row[3] = poistovna
+                        row[4] = ados
+                        row[5] = osetrujuci
                         updated = True
                     patients.append(row)
 
     # If patient not found, add new entry
     if not updated:
-        patients.append([meno, rodne_cislo, adresa, poistovna])
+        patients.append([meno, rodne_cislo, adresa, poistovna, ados, osetrujuci])
 
     # Write updated data back to CSV
     with open(csv_file, mode="w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        writer.writerow(["Meno", "Rodné číslo", "Adresa", "Zdravotná poisťovňa"])  # Write header
+        writer.writerow(["Meno", "Rodné číslo", "Adresa", "Zdravotná poisťovňa", "ADOS", "Ošetrujúci"])
         writer.writerows(patients)
 
 def save_entry_data():
@@ -343,106 +349,115 @@ def generate_pdf():
 
     os.makedirs(documents_path, exist_ok=True)
 
-    # Extract month and year from the first scheduled date
     first_date = editable_schedule[0][0]  # Get first date (format: 'dd.mm.yyyy')
     try:
         parsed_date = datetime.datetime.strptime(first_date, "%d.%m.%Y")
-        month_year = parsed_date.strftime("%m-%Y")  # Convert to MM-YYYY format
+        month_year = parsed_date.strftime("%d-%m-%Y")  # Convert to MM-YYYY format
     except ValueError:
         messagebox.showerror("Chyba", "Neplatný formát dátumu.")
         return
 
-    # Create a valid filename
     name = sanitize_filename(entry_meno.get().replace(" ", "_"))
-    pdf_filename = f"{month_year}_{name}.pdf"
+    rc = sanitize_filename(entry_rc.get())
+    pdf_filename = f"{rc}_{month_year}_{name}.pdf"
 
-    # **Fix: Save file to Documents/ADOS instead of the current directory**
     pdf_path = os.path.join(documents_path, pdf_filename)
 
-    # Create the PDF
     c = canvas.Canvas(pdf_path, pagesize=A4)
     width, height = A4
-    page_number = 1
+    page_number = entry_number.get()
 
     def replace_slovak_chars(text):
         """Replaces Slovak characters that might not render correctly in the PDF."""
         replacements = {
-            "č": "c", "š": "s", "ť": "t", "ž": "z", "ý": "y",
-            "á": "a", "í": "i", "é": "e", "ú": "u", "ľ": "l",
+            "č": "c", "ť": "t", "ž": "z", "ý": "y", "ú": "u", "ľ": "l",
             "ď": "d", "ň": "n", "ó": "o", "ř": "r", "ě": "e"
         }
         return "".join(replacements.get(char, char) for char in text)
 
     def draw_header():
-        """Draws patient details at the top of each page to match the format."""
         c.setFont("Helvetica-Bold", 14)
-        c.drawString(180, height - 40, replace_slovak_chars("DEKURZ OSETROVATELSKEJ STAROSTLIVOSTI"))
+        
+        # Title centered at the top
+        title_text = replace_slovak_chars("DEKURZ OŠETROVATELSKEJ STAROSTLIVOSTI")
+        title_width = c.stringWidth(title_text, "Helvetica-Bold", 14)
+        c.drawString((width - title_width) / 2, height - 40, title_text)
+
+        # Right-aligned sequential number
+        c.setFont("Helvetica", 10)
+        c.drawString(width - 200, height - 60, f"Poradové císlo strany dekurzu: {page_number}")
+
+        line_bottom = height - 160 
+
+
+        c.setStrokeColor(colors.black)
+        c.rect(50, height -110, width - 100, 45, stroke=1, fill=0)
+
+        company_info = {
+            "Andramed": ["Andramed, o.z.", "SNP 8, 98601 Fiľakovo", "ADOS"],
+            "ADAMED": ["ADOS ADANED s. r. o.", "Jánošíkova 4989/2 979 01 Rimavská Sobota", "ADOS"]
+        }
+        company = company_selection.get()
+        company_details = company_info.get(company, ["", "", ""])
+        c.setFont("Helvetica", 10)
+        c.drawString(55, height - 75, replace_slovak_chars(company_details[0]))
+        c.drawString(55, height - 90, replace_slovak_chars(company_details[1]))
+        c.drawString(55, height - 105, replace_slovak_chars(company_details[2]))
+
+        
+        c.drawString(55, height - 120, replace_slovak_chars("Meno, priezvisko, titul pacienta/pacientky:"))
+        c.drawString(400, height - 120, replace_slovak_chars("Rodné číslo:"))
+
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(55, height - 140, entry_meno.get())
+        c.drawString(400, height - 140, entry_rc.get())
+
+        c.rect(50, height -150, width - 100, 40, stroke=1, fill=0)
+        c.line(395, height - 150, 395, height - 110)
+
+        c.rect(50, height - 185, width - 100, 35, stroke=1, fill=0)
 
         c.setFont("Helvetica", 10)
-        c.drawString(50, height - 60, replace_slovak_chars("Andramed, o.z."))
-        c.drawString(50, height - 75, replace_slovak_chars("SNP 8, 98601 Fiľakovo"))
-        c.drawString(50, height - 90, replace_slovak_chars("ADOS"))
+        c.drawString(55, height - 170, replace_slovak_chars("Dátum a"))
+        c.drawString(55, height - 182, replace_slovak_chars("čas zápisu:"))
 
-        # Line Separator
-        c.line(50, height - 100, width - 50, height - 100)
+        c.line(145, height - 185, 145, height - 150)
 
-        # Patient Information
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(50, height - 120, replace_slovak_chars("Meno, priezvisko, titul pacienta/pacientky:"))
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, height - 150, entry_meno.get())
+        c.drawString(150, height - 170, replace_slovak_chars("Rozsah poskytnutej ZS a služieb súvisiacich s poskytnutím ZS, identifikácia ošetrujúceho"))
+        c.drawString(150, height - 180, replace_slovak_chars("zdravotného pracovníka (meno, priezvisko, odtlačok pečiatky a podpis)"))
 
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(350, height - 120, replace_slovak_chars("Rodné číslo:"))
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(350, height - 150, entry_rc.get())
-
-        # Line Separator
-        c.line(50, height - 160, width - 50, height - 160)
-
-        # Table Header
-        c.setFont("Helvetica-Bold", 10)
-
-    def draw_footer(page_num):
-        c.setFont("Helvetica", 10)
-        c.drawRightString(width - 50, 30, f"Strana {page_num}") 
+        c.rect(50, height - 800, width - 100, 615, stroke=1, fill=0)
+        c.line(145, height - 800, 145, height - 185)
 
     draw_header()
     c.setFont("Helvetica", 10)
-
-    # Start position for text
-    y_position = height - 180  
+    y_position = height - 200  
 
     for date, zs_time, write_time, text in editable_schedule:
         c.setFont("Helvetica", 10)
-        c.drawString(50, y_position, replace_slovak_chars(f'Dátum a čas zápisu: {date},  {write_time}'))
-        y_position -= 30
+        c.drawString(55, y_position, date)
+        c.drawString(55, y_position-10, write_time)
 
-        # Wrap text
-        text_lines = simpleSplit(replace_slovak_chars(f'{zs_time}: {text}'), "Helvetica", 10, width - 100)
+        text_lines = simpleSplit(replace_slovak_chars(f'{zs_time}: {text}'), "Helvetica", 10, width - 200)
         for line in text_lines:
-            c.drawString(50, y_position, line)
+            c.drawString(150, y_position, line)
             y_position -= 15
 
         # Nurse's Signature
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(50, y_position, name_worker_extra.get())
+        c.drawString(150, y_position, name_worker_extra.get())
         c.setFont("Helvetica", 10)
-        c.drawString(200, y_position, "Podpis:")
+        c.drawString(300, y_position, "Podpis:")
         y_position -= 15
 
-        # Draw separator line
-        c.setStrokeColor(colors.black)
-        c.line(50, y_position, width - 50, y_position)
         y_position -= 20
 
         # Ensure new page if needed
-        if y_position < 50:
+        if y_position < 100:
             c.showPage()
+            page_number = int(page_number) + 1
             draw_header()
-            y_position = height - 180
-
-    draw_footer(page_number)
+            y_position = height - 200
 
     c.save()
     open_pdf(pdf_path)
@@ -481,15 +496,20 @@ def find_patient_data():
                 entry_poistovna.delete(0, tk.END)
                 entry_poistovna.insert(0, row[3])
 
+                company_dropdown.set(row[4])
+
+                name_worker_extra.delete(0, tk.END)
+                name_worker_extra.insert(0, row[5])
+
                 return
     
     messagebox.showwarning("Chyba", "Pacient s týmto rodným číslom nebol nájdený.")
 
 def open_records_window():
-    """Opens a new window with all records for a given Rodné číslo, sorted by date."""
-    
+    """Opens a new window with all records for a given Rodné číslo, sorted by date and allows editing."""
+
     rodne_cislo = entry_rc.get().strip()
-    
+
     if not rodne_cislo:
         messagebox.showwarning("Chyba", "Zadajte rodné číslo pacienta.")
         return
@@ -499,7 +519,7 @@ def open_records_window():
         documents_path = os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")
     else:
         documents_path = os.path.expanduser("~/Documents/ADOS")
-    
+
     csv_file = os.path.join(documents_path, "nalezy_databaza.csv")
 
     if not os.path.isfile(csv_file):
@@ -515,7 +535,7 @@ def open_records_window():
             if len(row) >= 3 and row[0] == rodne_cislo:
                 try:
                     date_obj = datetime.datetime.strptime(row[1], "%m/%Y")  # Convert to date object
-                    records.append((date_obj, row[1], row[2]))  # Store as (date_obj, formatted date, text)
+                    records.append([row[1], row[2]])  # Store as [formatted date, text]
                 except ValueError:
                     continue  # Skip invalid rows
 
@@ -523,13 +543,10 @@ def open_records_window():
         messagebox.showwarning("Chyba", "Pre toto rodné číslo neboli nájdené žiadne záznamy.")
         return
 
-    # Sort records by date (oldest to newest)
-    records.sort(key=lambda x: x[0])
-
     # Create a new window
     records_win = tk.Toplevel(root)
     records_win.title(f"Záznamy pre {rodne_cislo}")
-    records_win.geometry("500x400")
+    records_win.geometry("600x400")
 
     # Scrollable Frame
     container = tk.Frame(records_win)
@@ -555,18 +572,58 @@ def open_records_window():
     tk.Label(scrollable_frame, text="Dátum (Mesiac/Rok)", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=10, pady=5, sticky="w")
     tk.Label(scrollable_frame, text="Nález", font=("Arial", 10, "bold")).grid(row=0, column=1, padx=10, pady=5, sticky="w")
 
-    # Add records to the window
-    for i, (_, date, text) in enumerate(records, start=1):
-        tk.Label(scrollable_frame, text=date).grid(row=i, column=0, padx=10, pady=2, sticky="w")
-        tk.Label(scrollable_frame, text=text, wraplength=300, justify="left").grid(row=i, column=1, padx=10, pady=2, sticky="w")
+    # Store references to Entry and Text widgets for updating
+    date_entries = []
+    text_boxes = []
 
+    # Add records to the window with editable fields
+    for i, (date, text) in enumerate(records, start=1):
+        date_var = tk.StringVar(value=date)
+        date_entry = tk.Entry(scrollable_frame, textvariable=date_var, width=15)
+        date_entry.grid(row=i, column=0, padx=10, pady=2, sticky="w")
+        date_entries.append(date_entry)
+
+        text_box = tk.Text(scrollable_frame, height=3, width=40, wrap="word")
+        text_box.insert("1.0", text)
+        text_box.grid(row=i, column=1, padx=10, pady=2, sticky="w")
+        text_boxes.append(text_box)
+
+    def save_changes():
+        """Saves the edited records back to the CSV file."""
+        updated_records = []
+        for i in range(len(records)):
+            updated_records.append([rodne_cislo, date_entries[i].get(), text_boxes[i].get("1.0", "end-1c")])
+
+        # Read existing data and replace the modified records
+        all_data = []
+        with open(csv_file, mode="r", encoding="utf-8") as file:
+            reader = csv.reader(file)
+            header = next(reader)
+            for row in reader:
+                if row[0] != rodne_cislo:  # Keep only non-edited rows
+                    all_data.append(row)
+
+        # Append updated records
+        all_data.extend(updated_records)
+
+        # Write back to CSV
+        with open(csv_file, mode="w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(header)  # Write header
+            writer.writerows(all_data)  # Write updated data
+
+        messagebox.showinfo("Úspech", "Záznamy boli úspešne uložené.")
+
+    # Save Button
+    btn_save = tk.Button(records_win, text="Uložiť zmeny", command=save_changes)
+    btn_save.pack(pady=10)
 
 
 
 # GUI Setup
 root = tk.Tk()
 root.title("ADOS")
-root.geometry("800x600")
+root.geometry("800x630")
 
 # Create a Frame for the form
 form_frame = tk.Frame(root)
@@ -608,7 +665,7 @@ ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=5)
 
 # Frame for Date & Time Selection
 datetime_frame = tk.Frame(root)
-datetime_frame.pack(pady=10, padx=10, fill="x")
+datetime_frame.pack(pady=5, padx=5, fill="x")
 
 # Začiatok (Start Date)
 tk.Label(datetime_frame, text="Začiatok:", width=20, anchor="e").grid(row=0, column=0, padx=5, pady=5)
@@ -657,11 +714,18 @@ schedule_dropdown.grid(row=4, column=1, padx=5, pady=5)
 
 ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=5)
 
-worker_frame = tk.Frame(root)
-worker_frame.pack(pady=5, fill="x")
-tk.Label(worker_frame, text="Meno vypĺňajúceho:", width=20, anchor="e").grid(row=0, column=0, padx=5, pady=5)
-name_worker_extra = tk.Entry(worker_frame, width=40)
+worker_company_frame = tk.Frame(root)
+worker_company_frame.pack(padx=5, pady=5, fill="x")
+# Meno vypĺňajúceho (Worker Name)
+tk.Label(worker_company_frame, text="Meno vypĺňajúceho:", width=20, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+name_worker_extra = tk.Entry(worker_company_frame, width=15)
 name_worker_extra.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(worker_company_frame, text="ADOS:", width=20, anchor="e").grid(row=0, column=2, padx=5, pady=5)
+company_selection = tk.StringVar(value="Andramed")
+company_options = ["Andramed", "ADAMED"]
+company_dropdown = ttk.Combobox(worker_company_frame, textvariable=company_selection, values=company_options, width=15)
+company_dropdown.grid(row=0, column=3, padx=5, pady=5)
 
 # Frame for "Nález" Input
 finding_frame = tk.Frame(root)
@@ -669,6 +733,13 @@ finding_frame.pack(pady=5, fill="x")
 tk.Label(finding_frame, text="Nález:", width=20, anchor="ne").grid(row=0, column=0, padx=5, pady=5, sticky="ne")
 text_extra = tk.Text(finding_frame, height=5, width=50, wrap="word")
 text_extra.grid(row=0, column=1, padx=5, pady=5)
+
+number_frame = tk.Frame(root)
+number_frame.pack(pady=5, fill="x")
+tk.Label(number_frame, text="Číslo dekurzu:", width=20, anchor="ne").grid(row=0, column=0, padx=5, pady=5, sticky="ne")
+vcmd = (root.register(validate_number_input), "%P")
+entry_number = tk.Entry(number_frame, width=15, validate="key", validatecommand=vcmd)
+entry_number.grid(row=0, column=1, padx=5, pady=5)
 
 
 tk.Button(root, text="Zobraziť nálezy pacienta", command=open_records_window).pack(pady=5)
