@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADOS - Formulár</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            padding: 20px;
+        }
+    
+        .container {
+            max-width: 700px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            margin: auto;
+        }
+    
+        label {
+            font-weight: bold;
+        }
+    
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+            position: relative;
+        }
+    
+        .suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            background: white;
+            border: 1px solid #ccc;
+            display: none;
+            z-index: 10;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+    
+        .suggestions div {
+            padding: 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+    
+        .suggestions div:hover {
+            background: #f0f0f0;
+        }
+        .tokens-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .token {
+            background-color: #007BFF;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+        .token button {
+            background: none;
+            border: none;
+            color: white;
+            font-weight: bold;
+            margin-left: 5px;
+            cursor: pointer;
+        }
+    </style>
+    <script>
+        function validateNumberInput(input) {
+            input.value = input.value.replace(/[^0-9]/g, '');
+        }
+
+        function findPatient() {
+            alert("Funkcia 'Hľadať pacienta' ešte nie je implementovaná.");
+        }
+
+        function submitForm() {
+            const form = document.getElementById("patientForm");
+            fetch("http://127.0.0.1:5000/submit", {
+                method: "POST",
+                body: new FormData(form)
+            })
+            .then(response => response.text())
+            .then(data => alert("Úspešne odoslané!"))
+            .catch(error => alert("Chyba pri odosielaní!"));
+        }
+    </script>
+</head>
+<body>
+
+    <div class="container">
+        <h2>ADOS formulár</h2>
+
+        <h3>Pacient</h3>
+
+        <form id="patientForm">
+            <div class="form-group">
+                <label for="meno">Meno:</label>
+                <input type="text" id="meno" name="meno" required>
+            </div>
+
+            <div class="form-group">
+                <label for="rodne_cislo">Rodné číslo:</label>
+                    <input type="text" id="rodne_cislo" name="rodne_cislo" maxlength="11"
+                        oninput="formatRodneCislo(this); searchPatient()" autocomplete="off" required>
+                    <div id="suggestions" class="suggestions"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="adresa">Adresa:</label>
+                <input type="text" id="adresa" name="adresa" required>
+            </div>
+
+            <div class="form-group">
+                <label for="poistovna">Zdravotná poisťovňa:</label>
+                <select id="poistovna" name="poistovna" required>
+                    <option>24 – DÔVERA zdravotná poisťovňa, a. s.</option>
+                    <option>25 – VŠEOBECNÁ zdravotná poisťovňa, a. s.</option>
+                    <option>27 – UNION zdravotná poisťovňa, a. s.</option>
+                </select>
+            </div>
+
+            <h3>Dátumy a časy</h3>
+
+            <div class="form-group">
+                <label for="date_start">Začiatok:</label>
+                <input type="date" id="date_start" name="date_start" required>
+            </div>
+
+            <div class="form-group">
+                <label for="date_end">Koniec:</label>
+                <input type="date" id="date_end" name="date_end" required>
+            </div>
+
+            <div class="form-group">
+                <label for="zs_start_time">Čas poskytnutia ZS od:</label>
+                <input type="time" id="zs_start_time" name="zs_start_time" value="08:00" required>
+            </div>
+
+            <div class="form-group">
+                <label for="zs_end_time">Čas poskytnutia ZS do:</label>
+                <input type="time" id="zs_end_time" name="zs_end_time" value="13:00" required>
+            </div>
+
+            <div class="form-group">
+                <label for="write_start_time">Čas zápisu od:</label>
+                <input type="time" id="write_start_time" name="write_start_time" value="13:00" required>
+            </div>
+
+            <div class="form-group">
+                <label for="write_end_time">Čas zápisu do:</label>
+                <input type="time" id="write_end_time" name="write_end_time" value="15:00" required>    
+            </div>
+
+            <div class="form-group">
+                <label for="schedule">Opakovanie:</label>
+                <select id="schedule" name="schedule" required>
+                    <option>Každý deň</option>
+                    <option>Každý pracovný deň</option>
+                    <option>3x v týždni</option>
+                </select>
+            </div>
+
+            <h3>Pracovník a spoločnosť</h3>
+
+            <div class="form-group">
+                <label for="name_worker">Meno vypĺňajúceho:</label>
+                <input type="text" id="name_worker" name="name_worker" required>
+            </div>
+
+            <div class="form-group">
+                <label for="company">ADOS:</label>
+                <select id="company" name="company" required>
+                    <option>Andramed</option>
+                    <option>ADANED</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="hl-text">Hlavný text:</label>
+                <textarea id="hl-text" name="hl-text" rows="3" required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="podtext-1">Vedľajší text 1:</label>
+                <textarea id="podtext-1" name="podtext-1" rows="3"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="date_picker_1">Dátumy 1:</label>
+                <input type="date" id="date_picker_1">
+                <div id="selected_dates_1" class="tokens-container"></div>
+                <input type="hidden" id="dates_list_1" name="dates_list_1">
+            </div>
+            
+            <div class="form-group">
+                <label for="podtext-2">Vedľajší text 2:</label>
+                <textarea id="podtext-2" name="podtext-2" rows="3"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="date_picker_2">Dátumy 2:</label>
+                <input type="date" id="date_picker_2">
+                <div id="selected_dates_2" class="tokens-container"></div>
+                <input type="hidden" id="dates_list_2" name="dates_list_2">
+            </div>
+            
+            <div class="form-group">
+                <label for="koniec-mesiaca">Text pre koniec mesiaca:</label>
+                <textarea id="koniec-mesiaca" name="koniec-mesiaca" rows="3"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="date_picker_3">Dátumy 3:</label>
+                <input type="date" id="date_picker_3">
+                <div id="selected_dates_3" class="tokens-container"></div>
+                <input type="hidden" id="dates_list_3" name="dates_list_3">
+            </div>
+
+            <div class="form-group">
+                <label for="entry_number">Číslo dekurzu:</label>
+                <input type="text" id="entry_number" name="entry_number" oninput="validateNumberInput(this)" required>
+            </div>
+
+            <button type="button" class="btn" onclick="submitForm()">Vytvoriť Dekurz</button>
+        </form>
+    </div>
+
+</body>
+<script>
+    function formatRodneCislo(input) {
+        let value = input.value.replace(/\D/g, ""); // Remove non-numeric characters
+
+        if (value.length > 6) {
+            value = value.substring(0, 6) + "/" + value.substring(6, 10);
+        }
+
+        input.value = value;
+    }
+
+    function searchPatient() {
+        let input = document.getElementById("rodne_cislo").value.trim();
+        let suggestionsBox = document.getElementById("suggestions");
+
+        if (input.length < 3) {
+            suggestionsBox.style.display = "none";
+            return;
+        }
+
+        fetch(`http://127.0.0.1:5000/search_patient?query=${encodeURIComponent(input)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Chyba pri načítaní údajov.");
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    console.error(data.error);
+                    return;
+                }
+
+                suggestionsBox.innerHTML = "";
+                if (data.length === 0) {
+                    suggestionsBox.style.display = "none";
+                    return;
+                }
+
+                data.forEach(patient => {
+                    let div = document.createElement("div");
+                    div.textContent = `${patient.rc} - ${patient.name}`;
+                    div.onclick = function () {
+                        document.getElementById("rodne_cislo").value = patient.rc;
+                        suggestionsBox.style.display = "none";
+                        fillPatientDetails(patient);
+                    };
+                    suggestionsBox.appendChild(div);
+                });
+
+                suggestionsBox.style.display = "block";
+            })
+            .catch(error => {
+                console.error("Chyba pri načítaní údajov:", error);
+            });
+    }
+
+    function fillPatientDetails(patient) {
+        document.getElementById("meno").value = patient.name;
+        document.getElementById("adresa").value = patient.address;
+        setSelectValue("poistovna", patient.insurance);
+        setSelectValue("company", patient.company);
+        document.getElementById("name_worker").value = patient.worker;
+
+        // Populate additional fields
+        document.getElementById("hl-text").value = patient.hl_text;
+        document.getElementById("podtext-1").value = patient.podtext_1;
+        document.getElementById("podtext-2").value = patient.podtext_2;
+        document.getElementById("koniec-mesiaca").value = patient.koniec_mesiaca;
+        document.getElementById("entry_number").value = patient.entry_number;
+    }
+
+    function setSelectValue(selectId, value) {
+        let selectElement = document.getElementById(selectId);
+        if (selectElement) {
+            let optionExists = Array.from(selectElement.options).some(option => option.value === value);
+            if (optionExists) {
+                selectElement.value = value;
+            }
+        }
+    }
+        
+    function setTodayDate() {
+        let today = new Date().toISOString().split("T")[0]; // Format YYYY-MM-DD
+        document.getElementById("date_start").value = today;
+        document.getElementById("date_end").value = today;
+    }
+
+    function setupDatePicker(datePickerId, selectedDatesContainerId, hiddenInputId) {
+            let selectedDates = [];
+
+            document.getElementById(datePickerId).addEventListener("change", function () {
+                let selectedDate = this.value;
+
+                if (!selectedDate || selectedDates.includes(selectedDate)) return; // Avoid duplicates
+
+                selectedDates.push(selectedDate); // Add to list
+                updateTokens();
+            });
+
+            function updateTokens() {
+                let container = document.getElementById(selectedDatesContainerId);
+                container.innerHTML = ""; // Clear previous tokens
+
+                selectedDates.forEach(date => {
+                    let token = document.createElement("div");
+                    token.classList.add("token");
+                token.textContent = date;
+
+                let removeBtn = document.createElement("button");
+                removeBtn.textContent = "×";
+                removeBtn.onclick = function () {
+                    selectedDates = selectedDates.filter(d => d !== date); // Remove from list
+                    updateTokens();
+                };
+
+                token.appendChild(removeBtn);
+                container.appendChild(token);
+            });
+
+            document.getElementById(hiddenInputId).value = selectedDates.join(","); // Store in hidden input
+        }
+    }
+    
+    function submitForm() {
+        let data = {
+            meno: document.getElementById("meno").value.trim(),
+            rodne_cislo: document.getElementById("rodne_cislo").value.trim(),
+            adresa: document.getElementById("adresa").value.trim(),
+            poistovna: document.getElementById("poistovna").value.trim(),
+            date_start: document.getElementById("date_start").value.trim(),
+            date_end: document.getElementById("date_end").value.trim(),
+            zs_start_time: document.getElementById("zs_start_time").value.trim(),
+            zs_end_time: document.getElementById("zs_end_time").value.trim(),
+            write_start_time: document.getElementById("write_start_time").value.trim(),
+            write_end_time: document.getElementById("write_end_time").value.trim(),
+            schedule: document.getElementById("schedule").value.trim(),
+            name_worker: document.getElementById("name_worker").value.trim(),
+            company: document.getElementById("company").value.trim(),
+            hl_text: document.getElementById("hl-text").value.trim(),
+            podtext_1: document.getElementById("podtext-1").value.trim(),
+            dates_podtex_1: document.getElementById("dates_list_1").value.trim(),
+            podtext_2: document.getElementById("podtext-2").value.trim(),
+            dates_podtex_2: document.getElementById("dates_list_2").value.trim(),
+            koniec_mesiaca: document.getElementById("koniec-mesiaca").value.trim(),
+            dates_koniec_mesiaca: document.getElementById("dates_list_3").value.trim(),
+            entry_number: document.getElementById("entry_number").value.trim()
+        };
+
+        fetch("http://127.0.0.1:5000/save_patient", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Chyba pri odosielaní údajov.");
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert(data.message);
+                console.log("Údaje boli úspešne uložené:", data);
+            })
+            .catch(error => {
+                console.error("Chyba pri ukladaní údajov:", error);
+                alert("Chyba pri ukladaní údajov! Skontrolujte backend.");
+            });
+    }
+    
+    function generateSchedule() {
+        let data = {
+            meno: document.getElementById("meno").value.trim(),
+            rodne_cislo: document.getElementById("rodne_cislo").value.trim(),
+            adresa: document.getElementById("adresa").value.trim(),
+            poistovna: document.getElementById("poistovna").value.trim(),
+            date_start: document.getElementById("date_start").value.trim(),
+            date_end: document.getElementById("date_end").value.trim(),
+            zs_start_time: document.getElementById("zs_start_time").value.trim(),
+            zs_end_time: document.getElementById("zs_end_time").value.trim(),
+            write_start_time: document.getElementById("write_start_time").value.trim(),
+            write_end_time: document.getElementById("write_end_time").value.trim(),
+            schedule: document.getElementById("schedule").value.trim(),
+            name_worker: document.getElementById("name_worker").value.trim(),
+            company: document.getElementById("company").value.trim(),
+            hl_text: document.getElementById("hl-text").value.trim(),
+            podtext_1: document.getElementById("podtext-1").value.trim(),
+            dates_podtex_1: document.getElementById("dates_list_1").value.trim(),
+            podtext_2: document.getElementById("podtext-2").value.trim(),
+            dates_podtex_2: document.getElementById("dates_list_2").value.trim(),
+            koniec_mesiaca: document.getElementById("koniec-mesiaca").value.trim(),
+            dates_koniec_mesiaca: document.getElementById("dates_list_3").value.trim(),
+            entry_number: document.getElementById("entry_number").value.trim()
+        };
+
+        fetch("http://127.0.0.1:5000/generate_schedule", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert("Chyba: " + data.error);
+                } else {
+                    displaySchedule(data.schedule);
+                    displayAdditionalTexts(data);
+                }
+            })
+            .catch(error => {
+                console.error("Chyba pri generovaní rozvrhu:", error);
+            });
+    }
+    
+    let selectedDates = [];
+    window.onload = function () {
+        setTodayDate();
+    };
+
+    setupDatePicker("date_picker_1", "selected_dates_1", "dates_list_1");
+    setupDatePicker("date_picker_2", "selected_dates_2", "dates_list_2");
+    setupDatePicker("date_picker_3", "selected_dates_3", "dates_list_3");
+</script>
+</html>
