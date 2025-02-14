@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 import datetime
 import random
@@ -10,6 +10,10 @@ from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 import platform
 import subprocess
+import webbrowser
+import threading
+import os
+import sys
 
 app = Flask(__name__)
 CORS(app)
@@ -342,5 +346,17 @@ def generate_schedule():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/')
+def index():
+    return render_template('form.html')
+
+@app.route('/route')
+def route():
+    return render_template('route.html')
+
+def open_browser():
+    webbrowser.open_new("http://127.0.0.1:5000/")
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    threading.Timer(1.5, open_browser).start()  # Delay to ensure the server starts first
+    app.run(host="127.0.0.1", port=5000, debug=False)

@@ -455,21 +455,20 @@
         let selectedDates = [];
 
         document.getElementById(datePickerId).addEventListener("change", function () {
-            let rawDate = this.value; // Get selected date (raw format)
+            let rawDate = this.value;
 
-            if (!rawDate || selectedDates.includes(rawDate)) return; // Avoid duplicates
+            if (!rawDate || selectedDates.includes(rawDate)) return;
 
-            let formattedDate = formatDate(rawDate); // Convert to dd.mm.yyyy
-
-            selectedDates.push(formattedDate); // Add formatted date to list
+            selectedDates.push(rawDate);
             updateTokens();
         });
 
         function updateTokens() {
             let container = document.getElementById(selectedDatesContainerId);
-            container.innerHTML = ""; // Clear previous tokens
+            container.innerHTML = "";
 
             selectedDates.forEach(date => {
+                date = formatDate(d);
                 let token = document.createElement("div");
                 token.classList.add("token");
                 token.textContent = date;
@@ -477,7 +476,7 @@
                 let removeBtn = document.createElement("button");
                 removeBtn.textContent = "×";
                 removeBtn.onclick = function () {
-                    selectedDates = selectedDates.filter(d => d !== date); // Remove from list
+                    selectedDates = selectedDates.filter(d => d !== date);
                     updateTokens();
                 };
 
@@ -485,7 +484,7 @@
                 container.appendChild(token);
             });
 
-            document.getElementById(hiddenInputId).value = selectedDates.join(","); // Store formatted dates in hidden input
+            document.getElementById(hiddenInputId).value = selectedDates.join(",");
         }
 
         function formatDate(dateString) {
