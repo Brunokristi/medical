@@ -348,11 +348,7 @@ def generate_schedule():
 
 @app.route('/')
 def index():
-    return render_template('form.html')
-
-@app.route('/route')
-def route():
-    return render_template('route.html')
+    return render_template('index.html')
 
 def open_browser():
     webbrowser.open_new("http://127.0.0.1:5000/")
