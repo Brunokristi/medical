@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, render_template
+from flask import Flask, request, jsonify, send_file, render_template, redirect, url_for, flash
 from flask_cors import CORS
 import datetime
 import random
@@ -14,9 +14,18 @@ import webbrowser
 import threading
 import os
 import sys
+import sqlite3
+from datetime import datetime, timedelta
+import calendar
+
+
 
 app = Flask(__name__)
 CORS(app)
+
+DATABASE_FILE = "ados_database.db"
+app.secret_key = "a3f8d3e87b5a4e5f9c6d4b2f6a1e8c3d"
+
 
 def get_database_path():
     if os.name == "nt":  # Windows
@@ -38,7 +47,6 @@ def replace_slovak_chars(text):
     }
     return "".join(replacements.get(char, char) for char in text)
 
-def save_patient(meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, hl_text, podtext_1, podtext_2, koniec_mesiaca):
     database_path = get_database_path()
     file = "database.csv"
     database_path = os.path.join(database_path, file)
@@ -212,40 +220,6 @@ def open_folder():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     
-@app.route("/search_patient", methods=["GET"])
-def search_patient():    
-    query = request.args.get("query", "").strip()
-    if len(query) < 3:
-        return jsonify([])
-
-    database_path = get_database_path()
-    file = "database.csv"
-    database_path = os.path.join(database_path, file)
-    if not os.path.isfile(database_path):
-        return jsonify({"error": "Databáza neexistuje"}), 404
-
-    results = []
-    with open(database_path, mode="r", encoding="utf-8") as file:
-        reader = csv.reader(file)
-        headers = next(reader, None)  # Read header row
-
-        for row in reader:
-            if len(row) >= 11 and row[1].startswith(query):  # Ensure valid row and match Rodné číslo
-                results.append({
-                    "rc": row[1],  # Rodné číslo
-                    "name": row[0],  # Meno
-                    "address": row[2],  # Adresa
-                    "insurance": row[3],  # Poistovňa
-                    "worker": row[4],  # Meno vypĺňajúceho
-                    "company": row[5],  # ADOS
-                    "hl_text": row[6],  # Hlavný text
-                    "podtext_1": row[7],  # Podtext 1
-                    "podtext_2": row[8],  # Podtext 2
-                    "koniec_mesiaca": row[9],  # Text koniec mesiaca
-                    "entry_number": row[10]  # Číslo dekurzu
-                })
-
-    return jsonify(results)
 
 @app.route("/generate_schedule", methods=["POST"])
 def generate_schedule():
@@ -346,13 +320,339 @@ def generate_schedule():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/')
+
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    conn = get_db_connection()
+    nurses = conn.execute("SELECT * FROM sestry").fetchall()
+    conn.close()
+    return render_template("login.html", nurses=nurses)
+
+@app.route("/add_nurse", methods=["POST"])
+def add_nurse():
+    name = request.form.get("meno").strip()
+
+    if not name:
+        flash("Nurse name cannot be empty!", "warning")
+        return redirect(url_for("login"))
+
+    conn = get_db_connection()
+    try:
+        conn.execute("INSERT INTO sestry (meno) VALUES (?)", (name,))
+        conn.commit()
+        flash(f"Nurse '{name}' added successfully!", "success")
+    except sqlite3.Error as e:
+        flash(f"Database error: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(url_for("index"))
+
+
+
+
+def generate_dates(cursor, month_id, year, month):
+    days_in_month = calendar.monthrange(year, month)[1]
+
+    # Insert each day into the dni table
+    for day in range(1, days_in_month + 1):
+        date_str = f"{year}-{month:02d}-{day:02d}"  # Format YYYY-MM-DD
+        cursor.execute("INSERT INTO dni (datum, mesiac) VALUES (?, ?)", (date_str, month_id))
+
+@app.route("/month", methods=["POST"])
+def month():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Get JSON data from fetch request
+        data = request.get_json()
+
+        nurse_id = data.get("nurse")
+        month_input = data.get("month")
+        zs_start_time = data.get("zs_start_time")
+        zs_end_time = data.get("zs_end_time")
+        write_start_time = data.get("write_start_time")
+        write_end_time = data.get("write_end_time")
+
+        if not month_input or not nurse_id:
+            return jsonify({"error": "Mesiac a sestra sú povinné!"}), 400
+
+        # Extract year and month from YYYY-MM format
+        year, month = map(int, month_input.split("-"))
+
+        # Check if the month already exists
+        cursor.execute("SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?", (month, year, nurse_id))
+        existing_month = cursor.fetchone()
+
+        if existing_month:
+            flash("Mesiac už existuje, načítavam dáta...", "info")
+            conn.close()
+            return jsonify({"redirect": url_for("detail", nurse_id=nurse_id, year=year, month=month)})
+
+        # Insert new month if it does not exist
+        cursor.execute("""
+            INSERT INTO mesiac (mesiac, rok, vysetrenie_start, vysetrenie_koniec, vypis_start, vypis_koniec, sestra_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (month, year, zs_start_time, zs_end_time, write_start_time, write_end_time, nurse_id))
+        conn.commit()
+
+        # Retrieve the newly inserted month ID
+        cursor.execute("SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ? ", (month, year, nurse_id))
+        month_id = cursor.fetchone()["id"]
+
+        # Generate and insert all days of the month
+        generate_dates(cursor, month_id, year, month)
+        conn.commit()  # Ensure days are committed to the database
+
+        flash("Mesiac a jeho dátumy boli úspešne vytvorené!", "success")
+
+        conn.close()
+
+        # Redirect to the detail page for that month
+        return jsonify({"redirect": url_for("detail", nurse_id=nurse_id, year=year, month=month)})
+
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+
+@app.route("/save_patient", methods=["POST"])
+def save_patient():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Get JSON data from request
+        data = request.get_json()
+
+        # Use .get() with a default empty string if value is missing
+        meno = data.get("meno", "").strip()
+        rodne_cislo = data.get("rodne_cislo", "").strip()
+        adresa = data.get("adresa", "").strip()
+        poistovna = data.get("poistovna", "").strip()
+        ados = data.get("ados", "").strip()
+        sestra = data.get("sestra", "").strip()
+        nalez = data.get("nalez", "").strip()
+        osetrenie = data.get("osetrenie", "").strip()
+        vedlajsie_osetrenie = data.get("vedlajsie_osetrenie", "").strip()
+        koniec_mesiaca = data.get("koniec_mesiaca", "").strip()
+        cislo_dekurzu = data.get("cislo_dekurzu", "").strip()
+        vypisane = data.get("vypisane", False)  # Keep False as default for booleans
+
+        if not meno or not rodne_cislo:
+            return jsonify({"error": "Meno a rodné číslo sú povinné!"}), 400
+
+        # Check if the patient already exists
+        cursor.execute("SELECT id FROM pacienti WHERE rodne_cislo = ?", (rodne_cislo,))
+        existing_patient = cursor.fetchone()
+
+        if existing_patient:
+            # Patient exists, update the record
+            patient_id = existing_patient["id"]
+            cursor.execute("""
+                UPDATE pacienti
+                SET meno = ?, adresa = ?, poistovna = ?, ados = ?, sestra = ?, nalez = ?, osetrenie = ?, 
+                    vedlajsie_osetrenie = ?, koniec_mesiaca = ?, cislo_dekurzu = ?, vypisane = ?
+                WHERE id = ?
+            """, (meno, adresa, poistovna, ados, sestra, nalez, osetrenie, vedlajsie_osetrenie, koniec_mesiaca, cislo_dekurzu, vypisane, patient_id))
+            message = "Pacient bol úspešne aktualizovaný!"
+        else:
+            # Insert new patient
+            cursor.execute("""
+                INSERT INTO pacienti (meno, rodne_cislo, adresa, poistovna, ados, sestra, nalez, osetrenie, vedlajsie_osetrenie, koniec_mesiaca, cislo_dekurzu, vypisane)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (meno, rodne_cislo, adresa, poistovna, ados, sestra, nalez, osetrenie, vedlajsie_osetrenie, koniec_mesiaca, cislo_dekurzu, vypisane))
+            message = "Pacient bol úspešne pridaný!"
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"message": message}), 200
+
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/search_patient", methods=["GET"])
+def search_patient():    
+    query = request.args.get("query", "").strip()
+    
+    if len(query) < 3:
+        return jsonify([])
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT id, meno, rodne_cislo, adresa, poistovna, sestra, ados, nalez, osetrenie, vedlajsie_osetrenie, koniec_mesiaca, cislo_dekurzu
+            FROM pacienti
+            WHERE meno LIKE ? OR rodne_cislo LIKE ?
+        """, (f"%{query}%", f"%{query}%"))
+
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row["id"],
+                "rc": row["rodne_cislo"],  # Rodné číslo
+                "name": row["meno"],  # Meno
+                "address": row["adresa"],  # Adresa
+                "insurance": row["poistovna"],  # Poistovňa
+                "worker": row["sestra"],  # ID sestry (can be used to fetch name)
+                "company": row["ados"],  # ADOS
+                "hl_text": row["nalez"],  # Hlavný text
+                "podtext_1": row["osetrenie"],  # Podtext 1
+                "podtext_2": row["vedlajsie_osetrenie"],  # Podtext 2
+                "koniec_mesiaca": row["koniec_mesiaca"],  # Text koniec mesiaca
+                "entry_number": row["cislo_dekurzu"]  # Číslo dekurzu
+            })
+
+        conn.close()
+        return jsonify(results)
+
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+@app.route("/detail/<int:nurse_id>/", defaults={"year": None, "month": None, "day": None}, methods=["GET", "POST"])
+@app.route("/detail/<int:nurse_id>/<int:year>/", defaults={"month": None, "day": None}, methods=["GET", "POST"])
+@app.route("/detail/<int:nurse_id>/<int:year>/<int:month>/", defaults={"day": None}, methods=["GET", "POST"])
+@app.route("/detail/<int:nurse_id>/<int:year>/<int:month>/<int:day>/", methods=["GET", "POST"])
+def detail(nurse_id, year, month, day):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor() 
+
+        # nurse
+        cursor.execute("SELECT * FROM sestry WHERE id = ?", (nurse_id,))
+        nurse = cursor.fetchone()
+
+        if not nurse:
+            conn.close()
+            flash("Nurse not found!", "danger")
+            return redirect(url_for("index"))
+        
+        
+        month_data = None
+        days = []
+        patients_in_month = []
+        patients_in_day = []
+
+        if year and month:
+            cursor.execute("SELECT * FROM mesiac WHERE mesiac = ? AND rok = ?", (month, year))
+            month_data = cursor.fetchone()
+
+            if month_data:
+                cursor.execute("SELECT * FROM dni WHERE mesiac = ?", (month_data["id"],))
+                days = cursor.fetchall()
+
+                cursor.execute("""
+                    SELECT DISTINCT pacienti.* FROM pacienti
+                    JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
+                    JOIN dni ON den_pacient.den_id = dni.id
+                    WHERE dni.mesiac = ?
+                """, (month_data["id"],))
+                patients_in_month = cursor.fetchall()
+
+        if day:
+            cursor.execute("""
+                SELECT pacienti.* FROM pacienti
+                JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
+                WHERE den_pacient.den_id = ?
+            """, (day,))
+            patients_in_day = cursor.fetchall()
+
+        conn.close()
+
+        return render_template("index.html", 
+                               nurse=nurse, 
+                               month=month_data, 
+                               days=days, 
+                               patients_in_month=patients_in_month, 
+                               patients_in_day=patients_in_day)
+
+    except Exception as e:
+        flash(f"Chyba: {e}", "danger")
+        return redirect(url_for("detail"))
+
+
 
 def open_browser():
     webbrowser.open_new("http://127.0.0.1:5000/")
 
+def get_db_connection():
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def check_db():
+    if not os.path.exists(DATABASE_FILE):
+        initialize_db()
+
+def initialize_db():
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.executescript("""
+            CREATE TABLE sestry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                meno TEXT NOT NULL
+            );
+
+            CREATE TABLE mesiac (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mesiac INTEGER NOT NULL,
+                rok INTEGER NOT NULL,
+                vysetrenie_start TIME NOT NULL,
+                vysetrenie_koniec TIME NOT NULL,
+                vypis_start TIME NOT NULL,
+                vypis_koniec TIME NOT NULL,
+                sestra_id INTEGER NOT NULL,
+                FOREIGN KEY (sestra_id) REFERENCES sestry(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE dni (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mesiac INTEGER NOT NULL,
+                datum DATE NOT NULL,
+                FOREIGN KEY (mesiac) REFERENCES mesiac(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE pacienti (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                meno TEXT NOT NULL,
+                rodne_cislo UNIQUE NOT NULL,
+                adresa TEXT NOT NULL,
+                poistovna TEXT NOT NULL,
+                ados TEXT NOT NULL,
+                sestra INTEGER NOT NULL,
+                nalez TEXT,
+                osetrenie TEXT,
+                vedlajsie_osetrenie TEXT,
+                koniec_mesiaca TEXT,
+                cislo_dekurzu INTEGER,
+                vypisane BOOLEAN DEFAULT 0,
+                FOREIGN KEY (sestra) REFERENCES sestry(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE den_pacient (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                den_id INTEGER NOT NULL,
+                pacient_id INTEGER NOT NULL,
+                vysetrenie DATETIME NOT NULL,
+                vypis DATETIME,
+                poradie_pacienta INTEGER,
+                FOREIGN KEY (den_id) REFERENCES dni(id) ON DELETE CASCADE,
+                FOREIGN KEY (pacient_id) REFERENCES pacienti(id) ON DELETE CASCADE
+            );
+        """)
+
 if __name__ == "__main__":
-    threading.Timer(1.5, open_browser).start()  # Delay to ensure the server starts first
+    check_db()
+    threading.Timer(1.5, open_browser).start()
     app.run(host="127.0.0.1", port=5000, debug=False)

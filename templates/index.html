@@ -13,354 +13,66 @@
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDRnAl8oUEx8je9s7J0zB7vPxIxAgyc_8c&libraries&libraries=places&callback=initMap" async defer></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Roboto', sans-serif;
-        }   
-
-        .main {
-            overflow: hidden;
-            display: flex;
-            max-height: calc(100vh - 40px);
-        }
-
-        h1, h2, h3 {
-            margin: 10px;
-            text-transform: uppercase;
-            font-weight: 300;
-        }
-
-        h1 {
-            font-size: 1.5em;
-            color: #fff;
-        }
-
-        h2 {
-            text-align: center;
-            color: #ccc;
-            font-size: medium;
-        }
-
-        h3 {
-            text-align: center;
-            color: #333;
-            font-size: medium;
-        }
-
-        .top {
-            background-color: #333;
-            color: white;
-            padding: 10px;
-            max-height: 40px;
-            display: flex;
-            align-items: center;
-            box-sizing: border-box;
-        }
-
-        .container {
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            overflow-y: auto;
-            box-sizing: border-box;
-        }
-
-        .left {
-            background-color: #fff;
-            width: 30%;
-            border-right: #333 1px solid;
-        }
-
-        .right {
-            background-color: #fff;
-            width: 70%;
-        }
-
-        .section {
-            padding: 30px;
-            height: fit-content;
-            border: solid 1px #ccc;
-            border-radius: 20px;
-            margin-bottom: 20px;
-        }
-
-        .lined-heading {
-            display: flex;
-            align-items: center;
-            text-align: center;
-            white-space: nowrap;
-            margin: 30px 0;
-        }
-
-        .lined-heading::before,
-        .lined-heading::after {
-            content: "";
-            flex-grow: 1;
-            height: 1px;
-            background-color: #ccc;
-        }
-    
-        label {
-            font-weight: 400;
-            margin-bottom: 5px;
-            color: #333;
-        }
-    
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 10px;
-            position: relative;
-            justify-content: flex-end;
-            width: 100%;
-        }
-
-        .half-form-group {
-            display: flex;
-            gap: 10px;            
-        }
-
-        .dates {
-            width: 200px;
-        }
-
-        input, select, textarea {
-            padding: 8px 12px;
-            border: 1px solid #ccc;
-            border-radius: 20px;
-            font-size: 14px;
-            font-family: Arial, Helvetica, sans-serif;
-            width: 100%;
-            box-sizing: border-box;
-            color: #333;
-        }
-    
-        .suggestions {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            width: 100%;
-            background: white;
-            border: solid 1px #5C9EAD;
-            border-radius: 20px;
-            display: none;
-            z-index: 10;
-            max-height: 150px;
-            overflow-y: auto;
-        }
-    
-        .suggestions div {
-            padding: 8px;
-            cursor: pointer;
-            border-bottom: 1px solid #5C9EAD;
-        }
-    
-        .suggestions div:hover {
-            background: #f0f0f0;
-        }
-
-        .token button {
-            background: none;
-            border: none;
-            color: white;
-            font-weight: bold;
-            margin-left: 5px;
-            cursor: pointer;
-        }
-
-        .btn {
-            background-color: #5C9EAD;
-            color: white;
-            padding: 8px 20px;
-            border: none;
-            border-radius: 20px;
-            font-size: 16px;
-            cursor: pointer;
-            margin-top: 20px;
-            width: 200px;
-        }
-
-        .btn.warning {
-            background-color: #fff;
-            color: #5C9EAD;
-            border: 1px solid #5C9EAD;
-        }
-
-        .text-button {
-            display: flex;
-            justify-content: center;
-            background: none;
-            color: #5C9EAD;
-            font-size: 24px;
-            cursor: pointer;
-            border: none;
-            align-self: center;
-            width: 100%;
-        }
-
-        .text-button i {
-            width: 20px;
-            height: 20px;
-            color: #5C9EAD;
-        }
-
-        .hidden {
-            max-height: 0;
-            opacity: 0;
-            overflow: hidden;
-            transition: max-height 0.5s ease-out, opacity 0.5s ease-out;
-        }
-
-        .hidden.show {
-            max-height: 500px;
-            opacity: 1;
-        }
-
-        .one-line {
-            gap: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .one-line button {
-            background-color: #5C9EAD;
-            color: white;
-            padding: 8px 20px;
-            border: none;
-            border-radius: 20px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-
-        .one-line button i {
-            font-size: 20px;
-        }
-
-        .remove-btn {
-            background: none;
-            border: none;
-            color: #fff;
-            cursor: pointer;
-
-        }
-
-        #draggable-container {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .token {
-            padding: 8px;
-            background: #5C9EAD;
-            border-radius: 20px;
-            cursor: grab;
-            color: white;
-            display: flex;
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        .button-container {
-            display: flex;
-            gap: 10px;
-            margin-left: auto;
-        }
-
-        .dragging {
-            opacity: 0.5;
-        }
-
-        .scroll {
-            display: flex;
-            gap: 10px;
-            overflow-x: auto;
-            padding-bottom: 10px;
-        }
-
-        .small-token {
-            padding: 8px;
-            background: #5C9EAD;
-            border-radius: 20px;
-            cursor: pointer;
-            color: white;
-            display: flex;
-            width: 100%;
-            box-sizing: border-box;
-            border: none;
-            min-width: 100px;
-            scroll-behavior: smooth;
-        }
-
-        ::-webkit-scrollbar {
-            width: 3px;  /* Adjust width for vertical scrollbar */
-            height: 3px; /* Adjust height for horizontal scrollbar */
-        }
-
-        /* Minimalist scrollbar track */
-        ::-webkit-scrollbar-track {
-            background: transparent; /* Make track invisible */
-        }
-
-        /* Minimalist scrollbar thumb (the moving part) */
-        ::-webkit-scrollbar-thumb {
-            background: #333; /* Light gray thumb */
-        }
-
-        /* Change thumb color on hover */
-        ::-webkit-scrollbar-thumb:hover {
-            background: #333;
-        }
-
-
-    </style>    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">  
+    <script src="{{ url_for('static', filename='js/posts.js') }}"></script>
 </head>
 <body>
     <div class="top">
         <h1>ADOS</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <p class="{{ category }}">{{ message }}</p>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="one-line">
+            <h2>{{ nurse['meno'] }}</h2>
+            <a href="{{ url_for('index') }}">Odhlásiť sa</a>
+        </div>
     </div>
 
     <div class="main">
         <div class="left container">
             <div class="section">
+                <input type="hidden" id="nurse_id" value="{{ nurse['id'] }}">
+            
                 <div class="form-group">
                     <label for="month">Mesiac</label>
-                    <input type="month" id="month" name="month" required>
+                    <input type="month" id="month" required>
                 </div>
-                
+            
                 <div class="hidden">
                     <div class="half-form-group">
                         <div class="form-group">
                             <label for="zs_start_time">Čas poskytnutia ZS</label>
-                            <input type="time" id="zs_start_time" name="zs_start_time" value="08:00" required>
+                            <input type="time" id="zs_start_time" value="08:00" required>
                         </div>
-                    
+            
                         <div class="form-group">
-                            <input type="time" id="zs_end_time" name="zs_end_time" value="14:00" required>
+                            <input type="time" id="zs_end_time" value="14:00" required>
                         </div>
                     </div>
-                    
+            
                     <div class="half-form-group">
                         <div class="form-group">
                             <label for="write_start_time">Čas zápisu</label>
-                            <input type="time" id="write_start_time" name="write_start_time" value="14:00" required>
+                            <input type="time" id="write_start_time" value="14:00" required>
                         </div>
-                    
+            
                         <div class="form-group">
-                            <input type="time" id="write_end_time" name="write_end_time" value="15:30" required>
+                            <input type="time" id="write_end_time" value="15:30" required>
                         </div>
                     </div>
                 </div>
-                
+
                 <button class="text-button"><i class="bi bi-chevron-compact-down"></i></button>
-
-
+            
+                <button class="btn" onclick="postMonth()">Zvoliť mesiac</button>
             </div>
+
 
             <div class="section">
                 <h2 class="lined-heading"><span>Pacient</span></h2>
@@ -389,6 +101,14 @@
                         <option>27 – UNION zdravotná poisťovňa, a. s.</option>
                     </select>
                 </div>
+
+                <div class="form-group">
+                    <label for="company">ADOS</label>
+                    <select id="company" name="company" required>
+                        <option>Andramed</option>
+                        <option>ADANED</option>
+                    </select>
+                </div>
                 
                 <h2 class="lined-heading"><span>Dátumy a časy</span></h2>
                 
@@ -415,7 +135,7 @@
 
                 <div class="one-line">
                     <button class="btn warning" onclick="clearInputs()">Vymazať</button>
-                    <button class="btn" onclick="handleAddPatient(); clearInputs()">Pridať</button>
+                    <button class="btn" onclick="postPatient(); clearInputs()">Pridať</button>
                 </div>
             </div>
 
@@ -429,7 +149,7 @@
                 <div class="form-group">
                     <label for="start">Začiatok cesty</label>
                     <select id="start" name="start" required onchange="updateRoute()">
-                        <option>Mieru 1969/1, Lučenec, BC, Slovensko</option>
+                        <option>Jánošíkova 4989/2 979 01 Rimavská Sobota, BC, Slovensko</option>
                         <option>SNP 8, Fiľakovo, BC, Slovensko</option>
                     </select>
                 </div>
@@ -579,14 +299,6 @@
                     <input type="text" id="name_worker" name="name_worker" required>
                 </div>
                 
-                <div class="form-group">
-                    <label for="company">ADOS</label>
-                    <select id="company" name="company" required>
-                        <option>Andramed</option>
-                        <option>ADANED</option>
-                    </select>
-                </div>
-                
                 <div style="display: flex; justify-content: flex-end;">
                     <button type="button" class="btn" onclick="generateSchedule()">Vytvoriť Dekurz</button>
                 </div>
@@ -637,51 +349,54 @@
     }
 
     function searchPatient() {
-            let input = document.getElementById("rodne_cislo").value.trim();
-            let suggestionsBox = document.getElementById("suggestions");
+        let input = document.getElementById("rodne_cislo").value.trim();
+        let suggestionsBox = document.getElementById("suggestions");
 
-            if (input.length < 3) {
-                suggestionsBox.style.display = "none";
-                return;
-            }
-
-            fetch(`http://127.0.0.1:5000/search_patient?query=${encodeURIComponent(input)}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error("Chyba pri načítaní údajov.");
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.error) {
-                        console.error(data.error);
-                        return;
-                    }
-
-                    suggestionsBox.innerHTML = "";
-                    if (data.length === 0) {
-                        suggestionsBox.style.display = "none";
-                        return;
-                    }
-
-                    data.forEach(patient => {
-                        let div = document.createElement("div");
-                        div.textContent = `${patient.rc} - ${patient.name} - ${patient.address}`;
-
-                        div.onclick = function () {
-                            document.getElementById("rodne_cislo").value = patient.rc;
-                            suggestionsBox.style.display = "none";
-                            fillPatientDetails(patient);
-                        };
-                        suggestionsBox.appendChild(div);
-                    });
-
-                    suggestionsBox.style.display = "block";
-                })
-                .catch(error => {
-                    console.error("Chyba pri načítaní údajov:", error);
-                });
+        if (input.length < 3) {
+            suggestionsBox.style.display = "none";
+            return;
         }
+
+        fetch(`/search_patient?query=${encodeURIComponent(input)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Chyba pri načítaní údajov.");
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    console.error(data.error);
+                    return;
+                }
+
+                suggestionsBox.innerHTML = "";
+                if (data.length === 0) {
+                    suggestionsBox.style.display = "none";
+                    return;
+                }
+
+                data.forEach(patient => {
+                    let div = document.createElement("div");
+                    div.textContent = `${patient.rc} - ${patient.name} - ${patient.address}`;
+                    div.classList.add("suggestion-item");
+
+                    div.onclick = function () {
+                        document.getElementById("rodne_cislo").value = patient.rc;
+                        suggestionsBox.style.display = "none";
+                        fillPatientDetails(patient);
+                    };
+
+                    suggestionsBox.appendChild(div);
+                });
+
+                suggestionsBox.style.display = "block";
+            })
+            .catch(error => {
+                console.error("Chyba pri načítaní údajov:", error);
+                alert("Chyba pri hľadaní pacienta. Skúste to znova.");
+            });
+    }
 
     function fillPatientDetails(patient) {
         document.getElementById("meno").value = patient.name;
@@ -763,68 +478,6 @@
         }
     }
 
-    function handleAddPatient() {
-        const patient = {
-            rc: document.getElementById("rodne_cislo").value.trim(),
-            name: document.getElementById("meno").value.trim(),
-            address: document.getElementById("adresa").value.trim(),
-            insurance: document.getElementById("poistovna").value.trim(),
-            dateStart: document.getElementById("date_start").value,
-            dateEnd: document.getElementById("date_end").value,
-            schedule: document.getElementById("schedule").value,
-        };
-
-        // Validate required fields
-        if (!patient.rc || !patient.name || !patient.address || !patient.dateStart || !patient.dateEnd) {
-            alert("Vyplňte všetky povinné údaje pacienta.");
-            return;
-        }
-
-        addPatientToList(patient);
-    }
-
-    function addPatientToList(patient) {
-        let container = document.getElementById("draggable-container");
-
-        let existingToken = [...container.children].find(div => div.dataset.rc === patient.rc);
-        if (existingToken) return;
-
-        let token = document.createElement("div");
-        token.classList.add("token");
-        token.dataset.rc = patient.rc;
-        token.dataset.address = patient.address;
-        token.draggable = true;
-
-        // Patient details
-        token.innerHTML = `<span>${patient.name} - ${patient.rc} - ${patient.address}</span>`;
-
-        // Create button container
-        let buttonContainer = document.createElement("div");
-        buttonContainer.classList.add("button-container");
-
-        // Remove button
-        let removeBtn = document.createElement("button");
-        removeBtn.classList.add("remove-btn");
-        removeBtn.innerHTML = `<i class="bi bi-x"></i>`;
-        removeBtn.onclick = function () {
-            container.removeChild(token);
-            updateRoute();
-        };
-
-        // let dragBtn = document.createElement("button");
-        // dragBtn.classList.add("drag-btn");
-        // dragBtn.innerHTML = `<i class="bi bi-grip-vertical"></i>`;
-
-        buttonContainer.appendChild(removeBtn);
-        // buttonContainer.appendChild(dragBtn);
-
-        token.appendChild(buttonContainer);
-        container.appendChild(token);
-
-        // applyDragAndDrop();
-        updateRoute();
-    }
-
     function clearInputs() {
         let today = new Date().toISOString().split("T")[0];
         document.getElementById("meno").value = "";
@@ -839,56 +492,20 @@
         focusRodneCislo();
     }
 
-    // function applyDragAndDrop() {
-    //     let items = document.querySelectorAll(".token");
+    function fetchPlaceDetails(placeId) {
+        const service = new google.maps.places.PlacesService(document.createElement("div"));
 
-    //     items.forEach((item) => {
-    //         item.draggable = true;
-    //         item.removeEventListener("dragstart", dragStart);
-    //         item.removeEventListener("dragend", dragEnd);
-    //         item.addEventListener("dragstart", dragStart);
-    //         item.addEventListener("dragend", dragEnd);
-    //     });
-    // }
-
-    // function dragStart(e) {
-    //     e.target.classList.add("dragging");
-    // }
-
-    // function dragEnd(e) {
-    //     e.target.classList.remove("dragging");
-    //     updateRoute();
-    // }
-
-    // document.getElementById("draggable-container").addEventListener("dragover", (e) => {
-    //     e.preventDefault();
-    //     const container = document.getElementById("draggable-container");
-    //     const afterElement = getDragAfterElement(container, e.clientY);
-    //     const draggedItem = document.querySelector(".dragging");
-    //     if (draggedItem) {
-    //         if (afterElement == null) {
-    //             container.appendChild(draggedItem);
-    //         } else {
-    //             container.insertBefore(draggedItem, afterElement);
-    //         }
-    //     }
-    // });
-
-    // function getDragAfterElement(container, y) {
-    //     const draggableElements = [...container.querySelectorAll(".token:not(.dragging)")];
-
-    //     return draggableElements.reduce((closest, child) => {
-    //         const box = child.getBoundingClientRect();
-    //         const offset = y - box.top - box.height / 2;
-    //         if (offset < 0 && offset > closest.offset) {
-    //             return { offset: offset, element: child };
-    //         } else {
-    //             return closest;
-    //         }
-    //     }, { offset: Number.NEGATIVE_INFINITY }).element;
-    // }
-
-    // document.addEventListener("DOMContentLoaded", applyDragAndDrop);
+        service.getDetails(
+            { placeId: placeId },
+            function (place, status) {
+                if (status === google.maps.places.PlacesServiceStatus.OK) {
+                    console.log("Full Address:", place.formatted_address);
+                    console.log("Latitude:", place.geometry.location.lat());
+                    console.log("Longitude:", place.geometry.location.lng());
+                }
+            }
+        );
+    }
 
     document.addEventListener("click", function (event) {
         const suggestionsContainer = document.getElementById("address-suggestions");
@@ -897,72 +514,16 @@
         }
     });
 
-    function fetchPlaceDetails(placeId) {
-            const service = new google.maps.places.PlacesService(document.createElement("div"));
 
-            service.getDetails(
-                { placeId: placeId },
-                function (place, status) {
-                    if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        console.log("Full Address:", place.formatted_address);
-                        console.log("Latitude:", place.geometry.location.lat());
-                        console.log("Longitude:", place.geometry.location.lng());
-                    }
-                }
-            );
-        }
+
+
+
+
+
+
+
 
     
-    
-
-
-
-    function generateSchedule() {
-        let data = {
-            meno: document.getElementById("meno").value.trim(),
-            rodne_cislo: document.getElementById("rodne_cislo").value.trim(),
-            adresa: document.getElementById("adresa").value.trim(),
-            poistovna: document.getElementById("poistovna").value.trim(),
-            date_start: document.getElementById("date_start").value.trim(),
-            date_end: document.getElementById("date_end").value.trim(),
-            zs_start_time: document.getElementById("zs_start_time").value.trim(),
-            zs_end_time: document.getElementById("zs_end_time").value.trim(),
-            write_start_time: document.getElementById("write_start_time").value.trim(),
-            write_end_time: document.getElementById("write_end_time").value.trim(),
-            schedule: document.getElementById("schedule").value.trim(),
-            name_worker: document.getElementById("name_worker").value.trim(),
-            company: document.getElementById("company").value.trim(),
-            hl_text: document.getElementById("hl-text").value.trim(),
-            podtext_1: document.getElementById("podtext-1").value.trim(),
-            dates_podtext_1: document.getElementById("dates_list_1").value.trim(),
-            podtext_2: document.getElementById("podtext-2").value.trim(),
-            dates_podtext_2: document.getElementById("dates_list_2").value.trim(),
-            koniec_mesiaca: document.getElementById("koniec-mesiaca").value.trim(),
-            dates_koniec_mesiaca: document.getElementById("dates_list_3").value.trim(),
-            entry_number: document.getElementById("entry_number").value.trim()
-        };
-
-        fetch("http://127.0.0.1:5000/generate_schedule", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert("Chyba: " + data.error);
-                } else {
-                }
-            })
-            .catch(error => {
-                console.error("Chyba pri generovaní rozvrhu:", error);
-            });
-    }
-
-    setupDatePicker("date_picker_1", "selected_dates_1", "dates_list_1");
-    setupDatePicker("date_picker_2", "selected_dates_2", "dates_list_2");
-    setupDatePicker("date_picker_3", "selected_dates_3", "dates_list_3");
-
 
     function fetchSuggestions() {
         const input = document.getElementById("adresa");
@@ -1262,4 +823,167 @@
         });
 
 
+
+
+
+
+
+    function handleAddPatient() {
+            const patient = {
+                rc: document.getElementById("rodne_cislo").value.trim(),
+                name: document.getElementById("meno").value.trim(),
+                address: document.getElementById("adresa").value.trim(),
+                insurance: document.getElementById("poistovna").value.trim(),
+                dateStart: document.getElementById("date_start").value,
+                dateEnd: document.getElementById("date_end").value,
+                schedule: document.getElementById("schedule").value,
+            };
+
+            // Validate required fields
+            if (!patient.rc || !patient.name || !patient.address || !patient.dateStart || !patient.dateEnd) {
+                alert("Vyplňte všetky povinné údaje pacienta.");
+                return;
+            }
+
+            addPatientToList(patient);
+        }
+
+    function addPatientToList(patient) {
+        let container = document.getElementById("draggable-container");
+
+        let existingToken = [...container.children].find(div => div.dataset.rc === patient.rc);
+        if (existingToken) return;
+
+        let token = document.createElement("div");
+        token.classList.add("token");
+        token.dataset.rc = patient.rc;
+        token.dataset.address = patient.address;
+        token.draggable = true;
+
+        // Patient details
+        token.innerHTML = `<span>${patient.name} - ${patient.rc} - ${patient.address}</span>`;
+
+        // Create button container
+        let buttonContainer = document.createElement("div");
+        buttonContainer.classList.add("button-container");
+
+        // Remove button
+        let removeBtn = document.createElement("button");
+        removeBtn.classList.add("remove-btn");
+        removeBtn.innerHTML = `<i class="bi bi-x"></i>`;
+        removeBtn.onclick = function () {
+            container.removeChild(token);
+            updateRoute();
+        };
+
+        // let dragBtn = document.createElement("button");
+        // dragBtn.classList.add("drag-btn");
+        // dragBtn.innerHTML = `<i class="bi bi-grip-vertical"></i>`;
+
+        buttonContainer.appendChild(removeBtn);
+        // buttonContainer.appendChild(dragBtn);
+
+        token.appendChild(buttonContainer);
+        container.appendChild(token);
+
+        // applyDragAndDrop();
+        updateRoute();
+    }
+
+    // function applyDragAndDrop() {
+    //     let items = document.querySelectorAll(".token");
+
+    //     items.forEach((item) => {
+    //         item.draggable = true;
+    //         item.removeEventListener("dragstart", dragStart);
+    //         item.removeEventListener("dragend", dragEnd);
+    //         item.addEventListener("dragstart", dragStart);
+    //         item.addEventListener("dragend", dragEnd);
+    //     });
+    // }
+
+    // function dragStart(e) {
+    //     e.target.classList.add("dragging");
+    // }
+
+    // function dragEnd(e) {
+    //     e.target.classList.remove("dragging");
+    //     updateRoute();
+    // }
+
+    // document.getElementById("draggable-container").addEventListener("dragover", (e) => {
+    //     e.preventDefault();
+    //     const container = document.getElementById("draggable-container");
+    //     const afterElement = getDragAfterElement(container, e.clientY);
+    //     const draggedItem = document.querySelector(".dragging");
+    //     if (draggedItem) {
+    //         if (afterElement == null) {
+    //             container.appendChild(draggedItem);
+    //         } else {
+    //             container.insertBefore(draggedItem, afterElement);
+    //         }
+    //     }
+    // });
+
+    // function getDragAfterElement(container, y) {
+    //     const draggableElements = [...container.querySelectorAll(".token:not(.dragging)")];
+
+    //     return draggableElements.reduce((closest, child) => {
+    //         const box = child.getBoundingClientRect();
+    //         const offset = y - box.top - box.height / 2;
+    //         if (offset < 0 && offset > closest.offset) {
+    //             return { offset: offset, element: child };
+    //         } else {
+    //             return closest;
+    //         }
+    //     }, { offset: Number.NEGATIVE_INFINITY }).element;
+    // }
+
+    // document.addEventListener("DOMContentLoaded", applyDragAndDrop);
+
+    function generateSchedule() {
+        let data = {
+            meno: document.getElementById("meno").value.trim(),
+            rodne_cislo: document.getElementById("rodne_cislo").value.trim(),
+            adresa: document.getElementById("adresa").value.trim(),
+            poistovna: document.getElementById("poistovna").value.trim(),
+            date_start: document.getElementById("date_start").value.trim(),
+            date_end: document.getElementById("date_end").value.trim(),
+            zs_start_time: document.getElementById("zs_start_time").value.trim(),
+            zs_end_time: document.getElementById("zs_end_time").value.trim(),
+            write_start_time: document.getElementById("write_start_time").value.trim(),
+            write_end_time: document.getElementById("write_end_time").value.trim(),
+            schedule: document.getElementById("schedule").value.trim(),
+            name_worker: document.getElementById("name_worker").value.trim(),
+            company: document.getElementById("company").value.trim(),
+            hl_text: document.getElementById("hl-text").value.trim(),
+            podtext_1: document.getElementById("podtext-1").value.trim(),
+            dates_podtext_1: document.getElementById("dates_list_1").value.trim(),
+            podtext_2: document.getElementById("podtext-2").value.trim(),
+            dates_podtext_2: document.getElementById("dates_list_2").value.trim(),
+            koniec_mesiaca: document.getElementById("koniec-mesiaca").value.trim(),
+            dates_koniec_mesiaca: document.getElementById("dates_list_3").value.trim(),
+            entry_number: document.getElementById("entry_number").value.trim()
+        };
+
+        fetch("http://127.0.0.1:5000/generate_schedule", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert("Chyba: " + data.error);
+                } else {
+                }
+            })
+            .catch(error => {
+                console.error("Chyba pri generovaní rozvrhu:", error);
+            });
+    }
+
+    setupDatePicker("date_picker_1", "selected_dates_1", "dates_list_1");
+    setupDatePicker("date_picker_2", "selected_dates_2", "dates_list_2");
+    setupDatePicker("date_picker_3", "selected_dates_3", "dates_list_3");
 </script>
