@@ -15,6 +15,7 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">  
     <script src="{{ url_for('static', filename='js/posts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/calendars.js') }}"></script>
 </head>
 <body>
     <div class="top">
@@ -73,7 +74,6 @@
                 <button class="btn" onclick="postMonth()">Zvoliť mesiac</button>
             </div>
 
-
             <div class="section">
                 <h2 class="lined-heading"><span>Pacient</span></h2>
                 <div class="form-group">
@@ -115,14 +115,15 @@
                 
                 <div class="half-form-group">
                     <div class="form-group">
-                        <label for="date_start">Dátum poskytovania ZS</label>
-                        <input type="date" id="date_start" name="date_start" required>
+                        <label for="date_start">Poskytovanie ZS</label>
+                        <input class="dates" type="text" id="date_start" name="date_start" placeholder="Vyberte dátum">
                     </div>
                 
                     <div class="form-group">
-                        <input type="date" id="date_end" name="date_end" required>
+                        <input class="dates" type="text" id="date_end" name="date_end" placeholder="Vyberte dátum">
                     </div>
                 </div>
+
 
                 <div class="form-group">
                     <label for="schedule">Opakovanie</label>
@@ -140,18 +141,22 @@
             </div>
 
             <div class="section">
+                <h2 class="lined-heading"><span>Zoznam Pacientov v mesiaci</span></h2>
+                <div class="drag-list"></div>
+            </div>
+            
+
+            <div class="section">
                 <div class="one-line">
-                    <div class="date-navigation">
                         <button id="prevDay"><i class="bi bi-arrow-left-short"></i></button>
-                        <h3 class="selected-date" id="selectedDate">{{ days[0]['datum'] if days else 'No Dates' }}</h3>
+                        <h3 class="selected-date" id="selectedDate">{{ days[0]['datum'] if days else 'Žiadne dátumy' }}</h3>
                         <button id="nextDay"><i class="bi bi-arrow-right-short"></i></button>
-                    </div>
                 </div>
 
                 <div class="form-group">
                     <label for="start">Začiatok cesty</label>
                     <select id="start" name="start" required onchange="updateRoute()">
-                        <option>Jánošíkova 4989/2 979 01 Rimavská Sobota, BC, Slovensko</option>
+                        <option>Jánošíkova 2, Rimavská Sobota, BC, Slovensko</option>
                         <option>SNP 8, Fiľakovo, BC, Slovensko</option>
                     </select>
                 </div>
@@ -322,9 +327,12 @@
 
     window.onload = function () {
         setTodayDate();
-        console.log(days);
+        updateCalendar();
     };
 
+    
+
+    // sipka hore-dolu
     document.addEventListener("DOMContentLoaded", function () {
         const toggleButton = document.querySelector(".text-button");
         const hiddenSection = document.querySelector(".hidden");
@@ -431,8 +439,6 @@
 
     function setTodayDate() {
         let today = new Date().toISOString().split("T")[0];
-        document.getElementById("date_start").value = today;
-        document.getElementById("date_end").value = today;
         if (month && year) {
             document.getElementById("month").value = `${year}-${String(month).padStart(2, '0')}`;
         }
@@ -487,13 +493,20 @@
     }
 
     function clearInputs() {
-        let today = new Date().toISOString().split("T")[0];
         document.getElementById("meno").value = "";
         document.getElementById("rodne_cislo").value = "";
         document.getElementById("adresa").value = "";
-        document.getElementById("date_start").value = today;
-        document.getElementById("date_end").value = today;
+        document.getElementById("date_start").value = "";
+        document.getElementById("date_end").value = "";
         document.getElementById("period").value = "20";
+
+        // If using Flatpickr, clear the selected date
+        if (document.getElementById("date_start")._flatpickr) {
+            document.getElementById("date_start")._flatpickr.clear();
+        }
+        if (document.getElementById("date_end")._flatpickr) {
+            document.getElementById("date_end")._flatpickr.clear();
+        }
 
         setSelectValue(poistovna, "24 - DÔVERA zdravotná poisťovňa, a. s.");
         setSelectValue(schedule, "každý deň");
@@ -515,6 +528,7 @@
         );
     }
 
+    // vyber z roznych adries
     document.addEventListener("click", function (event) {
         const suggestionsContainer = document.getElementById("address-suggestions");
         if (!event.target.closest("#adresa")) {
@@ -522,6 +536,7 @@
         }
     });
 
+    // tlacitka na dni v mesiaci
     document.addEventListener("DOMContentLoaded", function () {
         let selectedDateElement = document.getElementById("selectedDate");
         let prevButton = document.getElementById("prevDay");
@@ -560,7 +575,35 @@
         updateDate();
     });
 
+    // obmedzenie kalendaru iba na zvoleny mesiac
+    function updateCalendar() {
+        let firstDay = new Date(year, month - 1, 1);
+        let lastDay = new Date(year, month, 0);
 
+        console.log(firstDay, lastDay);
+
+        flatpickr("#date_start", {
+            dateFormat: "d-m-Y",
+            enableTime: false,
+            disableMobile: false,
+            minDate: firstDay,
+            maxDate: lastDay,
+
+        });
+
+        flatpickr("#date_end", {
+            dateFormat: "d-m-Y",
+            enableTime: false,
+            disableMobile: false,
+            minDate: firstDay,
+            maxDate: lastDay,
+        });
+    }
+
+    //pri zmene mesiaca
+    monthInput.addEventListener("change", updateCalendar);
+
+        
 
 
 
@@ -783,13 +826,16 @@
         });
     }
 
+    // pri zmene adresy
     document.getElementById("start").addEventListener("change", updateRoute);
 
+    // vytvorit mapu pri nacitani stranky
     document.addEventListener("DOMContentLoaded", function () {
         initMap();
         initAutocomplete();
     });
 
+    // horizontal scroll
     document.addEventListener("DOMContentLoaded", function () {
         const scrollContainer = document.querySelector(".scroll");
 
@@ -799,6 +845,7 @@
         });
     });
 
+    //vyber datumu s obmedzeniami
     document.addEventListener("DOMContentLoaded", function () {
             const dateInput = document.getElementById("date_picker_1");
             const selectedDatesContainer = document.getElementById("selected_dates_1");
