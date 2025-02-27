@@ -391,20 +391,17 @@ def month():
             conn.close()
             return jsonify({"redirect": url_for("detail", nurse_id=nurse_id, year=year, month=month)})
 
-        # Insert new month if it does not exist
         cursor.execute("""
             INSERT INTO mesiac (mesiac, rok, vysetrenie_start, vysetrenie_koniec, vypis_start, vypis_koniec, sestra_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (month, year, zs_start_time, zs_end_time, write_start_time, write_end_time, nurse_id))
         conn.commit()
 
-        # Retrieve the newly inserted month ID
         cursor.execute("SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ? ", (month, year, nurse_id))
         month_id = cursor.fetchone()["id"]
 
-        # Generate and insert all days of the month
         generate_dates(cursor, month_id, year, month)
-        conn.commit()  # Ensure days are committed to the database
+        conn.commit()
 
         flash("Mesiac a jeho dátumy boli úspešne vytvorené!", "success")
 
@@ -545,12 +542,12 @@ def detail(nurse_id, year, month, day):
         patients_in_day = []
 
         if year and month:
-            cursor.execute("SELECT * FROM mesiac WHERE mesiac = ? AND rok = ?", (month, year))
+            cursor.execute("SELECT * FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?", (month, year, nurse_id))
             month_data = cursor.fetchone()
 
             if month_data:
                 cursor.execute("SELECT * FROM dni WHERE mesiac = ?", (month_data["id"],))
-                days = cursor.fetchall()
+                days = [dict(row) for row in cursor.fetchall()]
 
                 cursor.execute("""
                     SELECT DISTINCT pacienti.* FROM pacienti

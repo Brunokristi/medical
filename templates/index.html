@@ -141,9 +141,11 @@
 
             <div class="section">
                 <div class="one-line">
-                    <button><i class="bi bi-arrow-left-short"></i></button>
-                    <h3 class="selected-date"> 1.1.2025</h3>
-                    <button><i class="bi bi-arrow-right-short"></i></button>
+                    <div class="date-navigation">
+                        <button id="prevDay"><i class="bi bi-arrow-left-short"></i></button>
+                        <h3 class="selected-date" id="selectedDate">{{ days[0]['datum'] if days else 'No Dates' }}</h3>
+                        <button id="nextDay"><i class="bi bi-arrow-right-short"></i></button>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -314,9 +316,13 @@
     let routeLayer;
     let patientMarkers = [];
     let selectedDates = [];
+    let month = "{{ month.mesiac }}" || null;
+    let year = "{{ month.rok }}" || null;
+    let days = JSON.parse('{{ days | tojson | safe }}');
 
     window.onload = function () {
         setTodayDate();
+        console.log(days);
     };
 
     document.addEventListener("DOMContentLoaded", function () {
@@ -427,7 +433,9 @@
         let today = new Date().toISOString().split("T")[0];
         document.getElementById("date_start").value = today;
         document.getElementById("date_end").value = today;
-        document.getElementById("month").value = today.substring(0, 7);
+        if (month && year) {
+            document.getElementById("month").value = `${year}-${String(month).padStart(2, '0')}`;
+        }
     }
 
     function setupDatePicker(datePickerId, selectedDatesContainerId, hiddenInputId) {
@@ -514,6 +522,43 @@
         }
     });
 
+    document.addEventListener("DOMContentLoaded", function () {
+        let selectedDateElement = document.getElementById("selectedDate");
+        let prevButton = document.getElementById("prevDay");
+        let nextButton = document.getElementById("nextDay");
+
+        if (!Array.isArray(days) || days.length === 0) {
+            selectedDateElement.textContent = "No Dates";
+            prevButton.disabled = true;
+            nextButton.disabled = true;
+            return;
+        }
+
+        let currentIndex = 0;
+        selectedDateElement.textContent = days[currentIndex].datum;  // Set initial date
+
+        function updateDate() {
+            selectedDateElement.textContent = days[currentIndex].datum;
+            prevButton.disabled = currentIndex === 0;
+            nextButton.disabled = currentIndex === days.length - 1;
+        }
+
+        prevButton.addEventListener("click", function () {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateDate();
+            }
+        });
+
+        nextButton.addEventListener("click", function () {
+            if (currentIndex < days.length - 1) {
+                currentIndex++;
+                updateDate();
+            }
+        });
+
+        updateDate();
+    });
 
 
 

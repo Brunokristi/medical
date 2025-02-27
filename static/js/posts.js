@@ -1,19 +1,17 @@
 function postMonth() {
-    var nurseId = document.getElementById("nurse_id").value;
-    var monthInput = document.getElementById("month").value;
-    var zsStartTime = document.getElementById("zs_start_time").value;
-    var zsEndTime = document.getElementById("zs_end_time").value;
-    var writeStartTime = document.getElementById("write_start_time").value;
-    var writeEndTime = document.getElementById("write_end_time").value;
+    let nurseId = document.getElementById("nurse_id").value;
+    let monthInput = document.getElementById("month").value;
+    let zsStartTime = document.getElementById("zs_start_time").value;
+    let zsEndTime = document.getElementById("zs_end_time").value;
+    let writeStartTime = document.getElementById("write_start_time").value;
+    let writeEndTime = document.getElementById("write_end_time").value;
 
     if (!monthInput || !nurseId) {
-        alert("Prosím vyberte sestru a mesiac.");
+        alert("Mesiac a sestra sú povinné!");
         return;
     }
 
-    var [year, month] = monthInput.split("-");
-
-    var postData = {
+    let postData = {
         nurse: nurseId,
         month: monthInput,
         zs_start_time: zsStartTime,
@@ -29,11 +27,12 @@ function postMonth() {
         },
         body: JSON.stringify(postData)
     })
-        .then(response => {
-            if (response.redirected) {
-                window.location.href = response.url;
-            } else {
-                return response.json();
+        .then(response => response.json())
+        .then(data => {
+            if (data.redirect) {
+                window.location.href = data.redirect;  // ✅ Redirect if the month exists
+            } else if (data.error) {
+                alert("Chyba: " + data.error);
             }
         })
         .catch(error => {
@@ -41,6 +40,7 @@ function postMonth() {
             alert("Chyba pri odoslaní dát!");
         });
 }
+
 
 function postPatient() {
     let patientData = {
@@ -60,9 +60,6 @@ function postPatient() {
         body: JSON.stringify(patientData)
     })
         .then(response => response.json())
-        .then(data => {
-            alert(data.message);
-        })
         .catch(error => {
             console.error("Chyba pri ukladaní pacienta:", error);
         });
