@@ -116,11 +116,11 @@
                 <div class="half-form-group">
                     <div class="form-group">
                         <label for="date_start">Poskytovanie ZS</label>
-                        <input class="dates" type="text" id="date_start" name="date_start" placeholder="Vyberte dátum">
+                        <input class="dates" type="text" id="date_start" name="date_start" placeholder="Vyberte dátum" autocomplete="off">
                     </div>
                 
                     <div class="form-group">
-                        <input class="dates" type="text" id="date_end" name="date_end" placeholder="Vyberte dátum">
+                        <input class="dates" type="text" id="date_end" name="date_end" placeholder="Vyberte dátum" autocomplete="off">
                     </div>
                 </div>
 
@@ -128,15 +128,15 @@
                 <div class="form-group">
                     <label for="schedule">Opakovanie</label>
                     <select id="schedule" name="schedule" required>
-                        <option>Každý deň</option>
-                        <option>Každý pracovný deň</option>
-                        <option>3x v týždni</option>
+                        <option value="daily">Každý deň</option>
+                        <option value="weekday">Každý pracovný deň</option>
+                        <option value="3x_week">3x v týždni</option>
                     </select>
                 </div>
 
                 <div class="one-line">
                     <button class="btn warning" onclick="clearInputs()">Vymazať</button>
-                    <button class="btn" onclick="postPatient(); clearInputs()">Pridať</button>
+                    <button class="btn" onclick="postPatientAndSchedule(); clearInputs()">Pridať</button>
                 </div>
             </div>
 
@@ -496,17 +496,16 @@
         document.getElementById("meno").value = "";
         document.getElementById("rodne_cislo").value = "";
         document.getElementById("adresa").value = "";
-        document.getElementById("date_start").value = "";
-        document.getElementById("date_end").value = "";
-        document.getElementById("period").value = "20";
+        // document.getElementById("date_start").value = "";
+        // document.getElementById("date_end").value = "";
 
-        // If using Flatpickr, clear the selected date
-        if (document.getElementById("date_start")._flatpickr) {
-            document.getElementById("date_start")._flatpickr.clear();
-        }
-        if (document.getElementById("date_end")._flatpickr) {
-            document.getElementById("date_end")._flatpickr.clear();
-        }
+        // // If using Flatpickr, clear the selected date
+        // if (document.getElementById("date_start")._flatpickr) {
+        //     document.getElementById("date_start")._flatpickr.clear();
+        // }
+        // if (document.getElementById("date_end")._flatpickr) {
+        //     document.getElementById("date_end")._flatpickr.clear();
+        // }
 
         setSelectValue(poistovna, "24 - DÔVERA zdravotná poisťovňa, a. s.");
         setSelectValue(schedule, "každý deň");
@@ -586,24 +585,32 @@
             dateFormat: "d-m-Y",
             enableTime: false,
             disableMobile: false,
+            allowInput: true,
             minDate: firstDay,
             maxDate: lastDay,
-
+            onChange: function (selectedDates, dateStr, instance) {
+                console.log("Selected Date Start:", selectedDates);
+            }
         });
 
         flatpickr("#date_end", {
             dateFormat: "d-m-Y",
             enableTime: false,
             disableMobile: false,
+            allowInput: true,
             minDate: firstDay,
             maxDate: lastDay,
+            onChange: function (selectedDates, dateStr, instance) {
+                console.log("Selected Date End:", selectedDates); // Debugging
+            }
         });
     }
 
     //pri zmene mesiaca
-    monthInput.addEventListener("change", updateCalendar);
+    document.getElementById("month").addEventListener("change", updateCalendar);
 
-        
+    
+    
 
 
 

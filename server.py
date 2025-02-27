@@ -416,58 +416,49 @@ def month():
 
 
 
+
+
+
 @app.route("/save_patient", methods=["POST"])
 def save_patient():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-
-        # Get JSON data from request
         data = request.get_json()
 
-        # Use .get() with a default empty string if value is missing
         meno = data.get("meno", "").strip()
         rodne_cislo = data.get("rodne_cislo", "").strip()
         adresa = data.get("adresa", "").strip()
         poistovna = data.get("poistovna", "").strip()
-        ados = data.get("ados", "").strip()
         sestra = data.get("sestra", "").strip()
-        nalez = data.get("nalez", "").strip()
-        osetrenie = data.get("osetrenie", "").strip()
-        vedlajsie_osetrenie = data.get("vedlajsie_osetrenie", "").strip()
-        koniec_mesiaca = data.get("koniec_mesiaca", "").strip()
-        cislo_dekurzu = data.get("cislo_dekurzu", "").strip()
-        vypisane = data.get("vypisane", False)  # Keep False as default for booleans
+        ados = data.get("ados", "").strip()
 
         if not meno or not rodne_cislo:
-            return jsonify({"error": "Meno a rodné číslo sú povinné!"}), 400
+            return jsonify({"error": "Chýbajúce údaje"}), 400
 
-        # Check if the patient already exists
         cursor.execute("SELECT id FROM pacienti WHERE rodne_cislo = ?", (rodne_cislo,))
         existing_patient = cursor.fetchone()
 
         if existing_patient:
-            # Patient exists, update the record
             patient_id = existing_patient["id"]
+            # Update existing patient
             cursor.execute("""
                 UPDATE pacienti
-                SET meno = ?, adresa = ?, poistovna = ?, ados = ?, sestra = ?, nalez = ?, osetrenie = ?, 
-                    vedlajsie_osetrenie = ?, koniec_mesiaca = ?, cislo_dekurzu = ?, vypisane = ?
+                SET meno = ?, adresa = ?, poistovna = ?, sestra = ?, ados = ?
                 WHERE id = ?
-            """, (meno, adresa, poistovna, ados, sestra, nalez, osetrenie, vedlajsie_osetrenie, koniec_mesiaca, cislo_dekurzu, vypisane, patient_id))
-            message = "Pacient bol úspešne aktualizovaný!"
+            """, (meno, adresa, poistovna, sestra, ados, patient_id))
         else:
             # Insert new patient
             cursor.execute("""
-                INSERT INTO pacienti (meno, rodne_cislo, adresa, poistovna, ados, sestra, nalez, osetrenie, vedlajsie_osetrenie, koniec_mesiaca, cislo_dekurzu, vypisane)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (meno, rodne_cislo, adresa, poistovna, ados, sestra, nalez, osetrenie, vedlajsie_osetrenie, koniec_mesiaca, cislo_dekurzu, vypisane))
-            message = "Pacient bol úspešne pridaný!"
+                INSERT INTO pacienti (meno, rodne_cislo, adresa, poistovna, sestra, ados)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (meno, rodne_cislo, adresa, poistovna, sestra, ados))
+            patient_id = cursor.lastrowid  # Get the inserted patient ID
 
         conn.commit()
         conn.close()
 
-        return jsonify({"message": message}), 200
+        return jsonify({"success": True, "patient_id": patient_id})
 
     except Exception as e:
         print("Error:", e)
@@ -509,6 +500,47 @@ def search_patient():
 
         conn.close()
         return jsonify(results)
+
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+@app.route("/insert_schedule", methods=["POST"])
+def insert_schedule():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        data = request.get_json()
+        patient_id = data.get("patient_id")
+        year = data.get("year")
+        month = data.get("month")
+        schedule_dates = data.get("schedule")
+
+        if not patient_id or not year or not month or not schedule_dates:
+            return jsonify({"error": "Chýbajúce údaje"}), 400
+
+        # Retrieve days that belong to the selected month
+        cursor.execute("SELECT id, datum FROM dni WHERE mesiac = ?", (month,))
+        dni_records = {row["datum"]: row["id"] for row in cursor.fetchall()}  # Map dates to IDs
+
+        for date in schedule_dates:
+            if date in dni_records:
+                den_id = dni_records[date]  # Get the correct `den_id`
+
+                # Insert into `den-pacient`
+                cursor.execute("""
+                    INSERT INTO "den-pacient" (den_id, pacient_id)
+                    VALUES (?, ?)
+                """, (den_id, patient_id))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True})
 
     except Exception as e:
         print("Error:", e)
