@@ -30,7 +30,7 @@ function postMonth() {
         .then(response => response.json())
         .then(data => {
             if (data.redirect) {
-                window.location.href = data.redirect;  // ✅ Redirect if the month exists
+                window.location.href = data.redirect;
             } else if (data.error) {
                 alert("Chyba: " + data.error);
             }
@@ -41,45 +41,56 @@ function postMonth() {
         });
 }
 
-function generateSchedule(startDate, endDate, frequency) {
+function generate(startDate, endDate, frequency) {
+    console.log("Inside generateSchedule Function"); // Debugging
+    console.log("Start Date:", startDate);
+    console.log("End Date:", endDate);
+    console.log("Frequency:", frequency);
+
+    if (!startDate || !endDate) {
+        console.error("Invalid startDate or endDate!");
+        return [];
+    }
+
     let scheduleDates = [];
     let currentDate = new Date(startDate);
+    let lastDate = new Date(endDate);
 
-    while (currentDate <= new Date(endDate)) {
+    while (currentDate <= lastDate) {
         let dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
 
         if (frequency === "daily") {
             scheduleDates.push(currentDate.toISOString().split("T")[0]);
         } else if (frequency === "weekday" && dayOfWeek !== 0 && dayOfWeek !== 6) {
             scheduleDates.push(currentDate.toISOString().split("T")[0]);
-        } else if (frequency === "3x_week") {
-            // Choose Mon, Wed, Fri (1, 3, 5)
-            if ([1, 3, 5].includes(dayOfWeek)) {
-                scheduleDates.push(currentDate.toISOString().split("T")[0]);
-            }
+        } else if (frequency === "3x_week" && [1, 3, 5].includes(dayOfWeek)) {
+            scheduleDates.push(currentDate.toISOString().split("T")[0]);
         }
 
-        // Move to next day
         currentDate.setDate(currentDate.getDate() + 1);
     }
 
+    console.log("Generated Schedule Dates:", scheduleDates); // Debugging output
     return scheduleDates;
 }
+
 
 function getFlatpickrDate(inputId) {
     let picker = document.getElementById(inputId)?._flatpickr;
     if (picker && picker.selectedDates.length > 0) {
-        let selectedDate = picker.selectedDates[0];
+        let selectedDate = picker.selectedDates[0]; // Get selected date without modification
 
-        // Correctly format the date in YYYY-MM-DD without UTC shift
+        // Extract the correct year, month, and day
         let year = selectedDate.getFullYear();
-        let month = (selectedDate.getMonth() + 1).toString().padStart(2, "0"); // Ensure two digits
-        let day = (selectedDate.getDate() + 1).toString().padStart(2, "0"); // Add 1 day
+        let month = String(selectedDate.getMonth() + 1).padStart(2, "0"); // Ensure two digits
+        let day = String(selectedDate.getDate()).padStart(2, "0"); // Ensure two digits
 
-        return `${year}-${month}-${day}`;
+        return `${year}-${month}-${day}`; // Return in YYYY-MM-DD format
     }
     return null;
 }
+
+
 
 function postPatientAndSchedule() {
     let patientData = {
@@ -110,11 +121,6 @@ function postPatientAndSchedule() {
             let dateEnd = getFlatpickrDate("date_end");
             let frequency = document.getElementById("schedule").value;
 
-            console.log("Patient ID:", patientId);
-            console.log("Start Date:", dateStart);
-            console.log("End Date:", dateEnd);
-            console.log("Frequency:", frequency);
-
             if (!patientId || !dateStart || !dateEnd) {
                 alert("Vyplňte všetky povinné polia!");
                 return;
@@ -125,9 +131,11 @@ function postPatientAndSchedule() {
             let year = dateObj.getFullYear();
             let month = String(dateObj.getMonth() + 1).padStart(2, "0");
 
-            let schedule = generateSchedule(dateStart, dateEnd, frequency);
+            let schedule = generate(dateStart, dateEnd, frequency);
+
 
             let scheduleData = {
+                sestra: document.getElementById("nurse_id").value,
                 patient_id: patientId,
                 year: parseInt(year, 10),
                 month: parseInt(month, 10),
@@ -145,7 +153,8 @@ function postPatientAndSchedule() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert("Pacient a harmonogram boli úspešne pridané!");
+
+
             } else {
                 alert("Chyba pri ukladaní harmonogramu.");
             }

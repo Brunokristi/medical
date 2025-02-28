@@ -508,6 +508,8 @@ def search_patient():
 
 
 
+
+
 @app.route("/insert_schedule", methods=["POST"])
 def insert_schedule():
     try:
@@ -518,33 +520,57 @@ def insert_schedule():
         patient_id = data.get("patient_id")
         year = data.get("year")
         month = data.get("month")
-        schedule_dates = data.get("schedule")
+        schedule_dates = data.get("schedule")  # List of dates
+        nurse = data.get("sestra")
 
         if not patient_id or not year or not month or not schedule_dates:
-            return jsonify({"error": "Chýbajúce údaje"}), 400
+            return jsonify({"error": "Missing required data"}), 400
 
-        # Retrieve days that belong to the selected month
-        cursor.execute("SELECT id, datum FROM dni WHERE mesiac = ?", (month,))
-        dni_records = {row["datum"]: row["id"] for row in cursor.fetchall()}  # Map dates to IDs
+        cursor.execute("""
+            SELECT id, datum FROM dni
+            WHERE mesiac = (SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?)
+        """, (month, year, nurse))
+        
+        dni_records = {row["datum"]: row["id"] for row in cursor.fetchall()}
 
-        for date in schedule_dates:
-            if date in dni_records:
-                den_id = dni_records[date]  # Get the correct `den_id`
+        first_day = None
 
-                # Insert into `den-pacient`
+        for schedule_date in schedule_dates:
+            if schedule_date in dni_records:
+                den_id = dni_records[schedule_date]  # Get correct `den_id`
+
+                if first_day is None or schedule_date < first_day:
+                    first_day = schedule_date
+
                 cursor.execute("""
-                    INSERT INTO "den-pacient" (den_id, pacient_id)
-                    VALUES (?, ?)
+                    SELECT id FROM "den_pacient" WHERE den_id = ? AND pacient_id = ?
                 """, (den_id, patient_id))
+                existing_entry = cursor.fetchone()
+
+                if not existing_entry:
+                    cursor.execute("""
+                        INSERT INTO "den_pacient" (den_id, pacient_id)
+                        VALUES (?, ?)
+                    """, (den_id, patient_id))
 
         conn.commit()
         conn.close()
 
-        return jsonify({"success": True})
+        print("First day:", first_day)
+
+        if first_day:
+            return jsonify({
+                "redirect": url_for("detail", nurse_id=nurse, year=year, month=month, day=first_day)
+            })
+        else:
+            return jsonify({"error": "No valid schedule dates found"}), 400
 
     except Exception as e:
         print("Error:", e)
         return jsonify({"error": str(e)}), 500
+
+
+
 
 
 
@@ -672,8 +698,8 @@ def initialize_db():
             CREATE TABLE den_pacient (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 den_id INTEGER NOT NULL,
-                pacient_id INTEGER NOT NULL,
-                vysetrenie DATETIME NOT NULL,
+                pacient_id INTEGER,
+                vysetrenie DATETIME,
                 vypis DATETIME,
                 poradie_pacienta INTEGER,
                 FOREIGN KEY (den_id) REFERENCES dni(id) ON DELETE CASCADE,

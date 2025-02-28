@@ -141,12 +141,6 @@
             </div>
 
             <div class="section">
-                <h2 class="lined-heading"><span>Zoznam Pacientov v mesiaci</span></h2>
-                <div class="drag-list"></div>
-            </div>
-            
-
-            <div class="section">
                 <div class="one-line">
                         <button id="prevDay"><i class="bi bi-arrow-left-short"></i></button>
                         <h3 class="selected-date" id="selectedDate">{{ days[0]['datum'] if days else 'Žiadne dátumy' }}</h3>
@@ -161,7 +155,13 @@
                     </select>
                 </div>
 
-                <div id="draggable-container"></div>
+                <div id="draggable-container"id="patientList">
+                    {% for patient in patients_in_month %}
+                    <div class="draggable" draggable="true" data-id="{{ patient.id }}">
+                        {{ patient.meno }} ({{ patient.rodne_cislo }})
+                    </div>
+                    {% endfor %}
+                </div>
                 
                 <h2 class="lined-heading"><span>Informácia o ceste</span></h2>
                 <table id="route-info" border="1" style="width: 100%; border-collapse: collapse; text-align: center;">
