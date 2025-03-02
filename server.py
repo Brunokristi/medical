@@ -20,89 +20,32 @@ import calendar
 
 
 
+
 app = Flask(__name__)
 CORS(app)
 
 DATABASE_FILE = "ados_database.db"
 app.secret_key = "a3f8d3e87b5a4e5f9c6d4b2f6a1e8c3d"
 
-
-def get_database_path():
-    if os.name == "nt":  # Windows
-        return os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")
-    else:  # macOS/Linux
-        return os.path.expanduser("~/Documents/ADOS")
-
-def random_time(start, end):
-    start_seconds = start.hour * 3600 + start.minute * 60
-    end_seconds = end.hour * 3600 + end.minute * 60
-    random_seconds = random.randint(start_seconds, end_seconds)
-    return f"{random_seconds // 3600:02}:{(random_seconds % 3600) // 60:02}"
-
 def replace_slovak_chars(text):
-    """Replaces Slovak characters that might not render correctly in the PDF."""
     replacements = {
         "č": "c", "ť": "t", "ž": "z", "ý": "y", "ú": "u", "ľ": "l",
         "ď": "d", "ň": "n", "ó": "o", "ř": "r", "ě": "e"
     }
+    if isinstance(text, bytes):
+        text = text.decode('utf-8')
     return "".join(replacements.get(char, char) for char in text)
-
-    database_path = get_database_path()
-    file = "database.csv"
-    database_path = os.path.join(database_path, file)
-
-    os.makedirs(os.path.dirname(database_path), exist_ok=True)
-
-    headers = [
-        "Meno", "Rodné číslo", "Adresa", "Poistovňa", "Meno vypĺňajúceho",
-        "ADOS", "Hlavný text", "Podtext 1", "Podtext 2", "Text koniec mesiaca", "Číslo dekurzu"
-    ]
-
-    if not os.path.exists(database_path):
-        with open(database_path, mode="w", encoding="utf-8", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerow(headers)
-
-    if not rodne_cislo:
-        return jsonify({"error": "Rodné číslo je povinné!"}), 400
-
-    new_record = [
-        meno, rodne_cislo, adresa, poistovna, name_worker, company, hl_text, podtext_1, podtext_2, koniec_mesiaca, entry_number
-    ]
-
-    updated = False
-    records = []
-
-    with open(database_path, mode="r", encoding="utf-8") as file:
-        reader = csv.reader(file)
-        existing_records = list(reader)
-
-    for i, row in enumerate(existing_records):
-        if row and row[1] == rodne_cislo:
-            existing_records[i] = new_record
-            updated = True
-            break
-
-    if not updated:
-        existing_records.append(new_record)
-
-    with open(database_path, mode="w", encoding="utf-8", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerows(existing_records)
-
-    message = "Dáta boli úspešne aktualizované!" if updated else "Nový záznam bol pridaný!"
-    return jsonify({"message": message})
 
 def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, hl_text, podtext_1, podtext_2, koniec_mesiaca):
     if os.name == "nt":  # Windows
-        documents_path = os.path.join(os.environ["USERPROFILE"], "Documents", "ADOS")
+        documents_path = os.path.join(os.environ["USERPROFILE"], "Desktop", "ADOS")
     else:  # macOS/Linux
-        documents_path = os.path.expanduser("~/Documents/ADOS")
+        documents_path = os.path.expanduser("~/Desktop/ADOS")
 
     os.makedirs(documents_path, exist_ok=True)
 
     sanitized_rc = re.sub(r'[^0-9]', '', rodne_cislo)
-    document_date = datetime.datetime.strptime(editable_schedule[0][0], "%d.%m.%Y").strftime("%m%Y")
+    document_date = str(editable_schedule[0][0])
     sanitized_name = meno.replace(" ", "_")
 
     pdf_filename = f"{sanitized_rc}_{document_date}_{sanitized_name}.pdf"
@@ -194,7 +137,9 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
             y_position = height - 200
 
     c.save()
-    save_patient(meno, rodne_cislo, adresa, poistovna, name_worker, company, str(page_number+1), hl_text, podtext_1, podtext_2, koniec_mesiaca)
+
+    print("PDF generated successfully!")
+    update_patient_db(rodne_cislo, str(page_number+1))
     open_pdf(pdf_path)
 
     return pdf_path
@@ -204,6 +149,7 @@ def open_pdf(pdf_path):
         os.system(f'start "" "{pdf_path}"')
     else:
         os.system(f"open '{pdf_path}'")
+
 
 @app.route('/open-folder', methods=['GET'])
 def open_folder():
@@ -224,100 +170,109 @@ def open_folder():
 @app.route("/generate_schedule", methods=["POST"])
 def generate_schedule():
     try:
-        data = request.json
+        if not request.is_json:
+            return jsonify({"error": "Invalid request format, expected JSON"}), 400
 
-        # Extract form data
-        meno = data.get("meno")
-        rodne_cislo = data.get("rodne_cislo")
-        adresa = data.get("adresa")
-        poistovna = data.get("poistovna")
-        start_date = data.get("date_start")
-        end_date = data.get("date_end")
-        start_time = data.get("zs_start_time")
-        end_time = data.get("zs_end_time")
-        write_start_time = data.get("write_start_time")
-        write_end_time = data.get("write_end_time")
-        schedule_option = data.get("schedule")
-        name_worker = data.get("name_worker")
-        company = data.get("company")
-        hl_text = data.get("hl_text")  # Main text
-        entry_number = data.get("entry_number")
+        data = request.get_json()
+        patient_id = data.get("patient_id")
+        nalez = data.get("nalez", "")
+        podtext_1 = data.get("podtext_1", "")
+        dates_list_1 = data.get("dates_list_1", []) if isinstance(data.get("dates_list_1"), list) else []
 
-        # Additional texts and their corresponding dates
-        podtext_1 = data.get("podtext_1")
-        dates_podtext_1 = data.get("dates_podtext_1").split(",") if data.get("dates_podtext_1") else []
-        podtext_2 = data.get("podtext_2")
-        dates_podtext_2 = data.get("dates_podtext_2").split(",") if data.get("dates_podtext_2") else []
-        koniec_mesiaca = data.get("koniec_mesiaca")
-        dates_koniec_mesiaca = data.get("dates_koniec_mesiaca").split(",") if data.get("dates_koniec_mesiaca") else []
+        podtext_2 = data.get("podtext_2", "")
+        dates_list_2 = data.get("dates_list_2", []) if isinstance(data.get("dates_list_2"), list) else []
 
-        # Convert dates and times
-        start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
-        end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
-        start_time = datetime.datetime.strptime(start_time, "%H:%M").time()
-        end_time = datetime.datetime.strptime(end_time, "%H:%M").time()
-        write_start_time = datetime.datetime.strptime(write_start_time, "%H:%M").time()
-        write_end_time = datetime.datetime.strptime(write_end_time, "%H:%M").time()
+        podtext_3 = data.get("podtext_3", "")
+        dates_list_3 = data.get("dates_list_3", []) if isinstance(data.get("dates_list_3"), list) else []
 
-        # Dictionary to store texts by date (handles multiple texts per date)
+        podtext_4 = data.get("podtext_4", "")
+        dates_list_4 = data.get("dates_list_4", []) if isinstance(data.get("dates_list_4"), list) else []
+
+        koniec_mesiaca = data.get("koniec_mesiaca", "")
+        date_picker_5 = data.get("date_picker_5", None)
+
+        entry_number = data.get("entry_number", "")
+
+        nurse_id = data.get("nurse_id")
+
+
+        start = datetime.strptime(data.get("start"), "%Y-%m-%d").date()
+        end = datetime.strptime(data.get("end"), "%Y-%m-%d").date()
+        end = end + timedelta(days=1)
+
+
+        print("start", start)
+        print("end", end)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT meno, rodne_cislo, adresa, poistovna, ados 
+            FROM pacienti 
+            WHERE id = ?
+        """, (patient_id,))
+        patient = cursor.fetchone()
+
+        if not patient:
+            return jsonify({"error": "Patient not found"}), 404
+
+        meno, rodne_cislo, adresa, poistovna, company = patient
+
+        cursor.execute("""
+            SELECT dni.datum, den_pacient.vysetrenie, den_pacient.vypis
+            FROM den_pacient
+            JOIN dni ON den_pacient.den_id = dni.id
+            WHERE den_pacient.pacient_id = ? AND dni.datum >= ? AND dni.datum <= ?
+            ORDER BY dni.datum
+        """, (patient_id, start, end))
+        schedule_entries = [tuple(row) for row in cursor.fetchall()]
+
+
+        cursor.execute("""
+            SELECT meno FROM sestry WHERE id = ?
+        """, (nurse_id,))
+        name_worker = cursor.fetchone()
+        name_worker = name_worker[0] if name_worker else "Unknown Nurse"  # Extract value or set default
+
+
+        conn.close()
+
+        if not schedule_entries:
+            return jsonify({"error": "No schedule generated"}), 400
+
         text_by_date = {}
 
-        def add_text_to_date(date_str, text, category):
-            formatted_date = datetime.datetime.strptime(date_str.strip(), "%Y-%m-%d").strftime('%d.%m.%Y')
-            if formatted_date not in text_by_date:
-                text_by_date[formatted_date] = {"podtext_2": [], "podtext_1": [], "hl_text": [], "koniec_mesiaca": []}
-            
-            text_by_date[formatted_date][category].append(text)
+        def add_text_to_date(date_list, text):
+            if isinstance(date_list, list):
+                for date in date_list:
+                    if date.strip():
+                        if date not in text_by_date:
+                            text_by_date[date] = []
+                        text_by_date[date].append(text)
 
-        # Store all texts in dictionary with explicit order
-        for date in dates_podtext_2:
-            add_text_to_date(date, podtext_2, "podtext_2")  # 🔹 First (Highest Priority)
+        # 🔹 Add texts to dates
+        add_text_to_date(dates_list_1, podtext_1)
+        add_text_to_date(dates_list_2, podtext_2)
+        add_text_to_date(dates_list_3, podtext_3)
+        add_text_to_date(dates_list_4, podtext_4)
+        if date_picker_5:
+            add_text_to_date([date_picker_5], koniec_mesiaca)
 
-        for date in dates_podtext_1:
-            add_text_to_date(date, podtext_1, "podtext_1")  # 🔹 Before hlavný text
+        final_schedule = []
+        for date, arrival_time, write_time in schedule_entries:
+            combined_text = "\n".join(text_by_date.get(date, []))
+            if nalez:  
+                combined_text = nalez + "\n" + combined_text  # Add main text to every date
 
-        for date in dates_koniec_mesiaca:
-            add_text_to_date(date, koniec_mesiaca, "koniec_mesiaca")  # 🔹 Last (Final Summary)
+            final_schedule.append([date, arrival_time, write_time, combined_text])
 
-        # Generate schedule
-        editable_schedule = []
-        current_date = start_date
+        print("Final schedule:", final_schedule)
+        generate_pdf(final_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, nalez, podtext_1, podtext_2, koniec_mesiaca)
 
-        while current_date <= end_date:
-            formatted_date = current_date.strftime('%d.%m.%Y')
-            weekday = current_date.weekday()
-
-            if schedule_option == "Každý deň" or (schedule_option == "Každý pracovný deň" and weekday < 5) or (schedule_option == "3x v týždni" and weekday in [0, 2, 4]):
-                combined_texts = []  
-
-                if formatted_date in text_by_date:
-
-                    combined_texts.extend(text_by_date[formatted_date]["podtext_2"])
-                    combined_texts.extend(text_by_date[formatted_date]["podtext_1"])
-
-                combined_texts.append(hl_text)
-
-                if formatted_date in text_by_date and text_by_date[formatted_date]["koniec_mesiaca"]:
-                    combined_texts.extend(text_by_date[formatted_date]["koniec_mesiaca"])
-
-                editable_schedule.append([
-                    formatted_date,
-                    random_time(start_time, end_time),
-                    random_time(write_start_time, write_end_time),
-                    "\n\n".join(combined_texts)
-                ])
-
-            current_date += datetime.timedelta(days=1)
-
-        if not editable_schedule:
-            return jsonify({"error": "Neboli vygenerované žiadne dátumy."}), 400
-
-        # Generate PDF
-        pdf_path = generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, hl_text, podtext_1, podtext_2, koniec_mesiaca)
-
-        return jsonify({"message": "Plán bol úspešne vygenerovaný!", "pdf_path": pdf_path})
-
+        return jsonify({"success": True})
     except Exception as e:
+        print("Error:", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -505,6 +460,56 @@ def search_patient():
         print("Error:", e)
         return jsonify({"error": str(e)}), 500
 
+def update_patient_db(rodne_cislo, dekurz):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE pacienti 
+        SET cislo_dekurzu = ? 
+        WHERE rodne_cislo = ?
+    """, (dekurz, rodne_cislo))
+
+    conn.commit()
+    conn.close()
+
+@app.route("/update_patient", methods=["POST"])
+def update_patient():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        data = request.get_json()
+        patient_id = data.get("patient_id")
+
+        if not patient_id:
+            return jsonify({"error": "Missing patient ID"}), 400
+
+        # Update patient details
+        cursor.execute("""
+            UPDATE pacienti 
+            SET nalez = ?, osetrenie = ?, vedlajsie_osetrenie = ?, poznamka1 = ?, poznamka2 = ?, 
+                koniec_mesiaca = ?, cislo_dekurzu = ?
+            WHERE id = ?
+        """, (
+            data.get("nalez", ""),
+            data.get("podtext_1", ""),
+            data.get("podtext_2", ""),
+            data.get("podtext_3", ""),
+            data.get("podtext_4", ""),
+            data.get("koniec_mesiaca", ""),
+            data.get("entry_number", ""),
+            patient_id
+        ))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
 
 
 
@@ -520,44 +525,67 @@ def insert_schedule():
         patient_id = data.get("patient_id")
         year = data.get("year")
         month = data.get("month")
-        schedule_dates = data.get("schedule")  # List of dates
+        schedule_dates = data.get("schedule")  # List of date strings in 'YYYY-MM-DD' format
         nurse = data.get("sestra")
 
         if not patient_id or not year or not month or not schedule_dates:
             return jsonify({"error": "Missing required data"}), 400
 
+        # Fetch the month ID from `mesiac` table
         cursor.execute("""
-            SELECT id, datum FROM dni
-            WHERE mesiac = (SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?)
+            SELECT id FROM mesiac 
+            WHERE mesiac = ? AND rok = ? AND sestra_id = ?
         """, (month, year, nurse))
+        mesiac_id_row = cursor.fetchone()
+
+        if not mesiac_id_row:
+            return jsonify({"error": "Mesiac not found"}), 404
+
+        mesiac_id = mesiac_id_row["id"]
+
+        # Fetch all valid days in the given month from `dni` table
+        cursor.execute("""
+            SELECT id, strftime('%Y-%m-%d', datum) AS datum FROM dni
+            WHERE mesiac = ?
+        """, (mesiac_id,))
         
         dni_records = {row["datum"]: row["id"] for row in cursor.fetchall()}
 
-        first_day = None
+        cursor.execute("""
+            SELECT id FROM dni
+            WHERE mesiac = ?
+            ORDER BY datum ASC
+            LIMIT 1
+        """, (mesiac_id,))
 
+        first_day_row = cursor.fetchone()
+        if first_day_row:
+            first_day = first_day_row["id"]  # Store the ID of the first day
+        else:
+            first_day = None  # If no days exist, set to None
+
+
+        # Insert each scheduled date if it exists in `dni`
         for schedule_date in schedule_dates:
             if schedule_date in dni_records:
                 den_id = dni_records[schedule_date]  # Get correct `den_id`
 
-                if first_day is None or schedule_date < first_day:
-                    first_day = schedule_date
-
+                # Check if the entry already exists to avoid duplicates
                 cursor.execute("""
-                    SELECT id FROM "den_pacient" WHERE den_id = ? AND pacient_id = ?
+                    SELECT id FROM den_pacient WHERE den_id = ? AND pacient_id = ?
                 """, (den_id, patient_id))
                 existing_entry = cursor.fetchone()
 
                 if not existing_entry:
                     cursor.execute("""
-                        INSERT INTO "den_pacient" (den_id, pacient_id)
+                        INSERT INTO den_pacient (den_id, pacient_id)
                         VALUES (?, ?)
                     """, (den_id, patient_id))
 
         conn.commit()
         conn.close()
 
-        print("First day:", first_day)
-
+        # Redirect to the earliest scheduled day
         if first_day:
             return jsonify({
                 "redirect": url_for("detail", nurse_id=nurse, year=year, month=month, day=first_day)
@@ -569,8 +597,67 @@ def insert_schedule():
         print("Error:", e)
         return jsonify({"error": str(e)}), 500
 
+@app.route("/update_schedule", methods=["POST"])
+def update_schedule():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
+        data = request.get_json()
+        schedule_data = data.get("schedule")
+        sestra_id = data.get("sestra_id")
 
+        if not schedule_data:
+            return jsonify({"error": "No schedule data received"}), 400
+
+        for entry in schedule_data:
+            patient_id = entry.get("patient_id")
+            date = entry.get("date")
+            arrival_time = entry.get("arrival_time")
+            write_time = entry.get("write_time")
+
+            # ✅ Find `day_id` in `dni` table for the given `date`
+            cursor.execute("""
+                SELECT id FROM dni 
+                WHERE datum = ? AND mesiac IN 
+                    (SELECT id FROM mesiac WHERE sestra_id = ?)
+            """, (date, sestra_id))
+
+            day_row = cursor.fetchone()
+            if not day_row:
+                print(f"No matching day found for {date}")
+                continue
+
+            day_id = day_row["id"]
+
+            # ✅ Check if entry already exists
+            cursor.execute("""
+                SELECT id FROM den_pacient WHERE den_id = ? AND pacient_id = ?
+            """, (day_id, patient_id))
+            existing_entry = cursor.fetchone()
+
+            if existing_entry:
+                # ✅ Update existing entry
+                cursor.execute("""
+                    UPDATE den_pacient 
+                    SET vysetrenie = ?, vypis = ? 
+                    WHERE den_id = ? AND pacient_id = ?
+                """, (arrival_time, write_time, day_id, patient_id))
+            else:
+                # ✅ Insert new entry
+                cursor.execute("""
+                    INSERT INTO den_pacient (den_id, pacient_id, arrival_time, write_time)
+                    VALUES (?, ?, ?, ?)
+                """, (day_id, patient_id, arrival_time, write_time))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
 
 
 
@@ -582,9 +669,9 @@ def insert_schedule():
 def detail(nurse_id, year, month, day):
     try:
         conn = get_db_connection()
-        cursor = conn.cursor() 
+        cursor = conn.cursor()
 
-        # nurse
+        # Fetch nurse details
         cursor.execute("SELECT * FROM sestry WHERE id = ?", (nurse_id,))
         nurse = cursor.fetchone()
 
@@ -592,49 +679,70 @@ def detail(nurse_id, year, month, day):
             conn.close()
             flash("Nurse not found!", "danger")
             return redirect(url_for("index"))
-        
-        
+
         month_data = None
         days = []
         patients_in_month = []
-        patients_in_day = []
+        patients_by_day = {}
 
         if year and month:
-            cursor.execute("SELECT * FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?", (month, year, nurse_id))
+            # Fetch month data
+            cursor.execute("""
+                SELECT * FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?
+            """, (month, year, nurse_id))
             month_data = cursor.fetchone()
 
             if month_data:
-                cursor.execute("SELECT * FROM dni WHERE mesiac = ?", (month_data["id"],))
+                # Fetch all days in the month
+                cursor.execute("SELECT id, datum FROM dni WHERE mesiac = ?", (month_data["id"],))
                 days = [dict(row) for row in cursor.fetchall()]
 
+                # Fetch all patients in the month with their IDs
                 cursor.execute("""
-                    SELECT DISTINCT pacienti.* FROM pacienti
+                    SELECT DISTINCT pacienti.id AS patient_id, pacienti.* 
+                    FROM pacienti
                     JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
                     JOIN dni ON den_pacient.den_id = dni.id
                     WHERE dni.mesiac = ?
                 """, (month_data["id"],))
-                patients_in_month = cursor.fetchall()
+                patients_in_month = [dict(row) for row in cursor.fetchall()]
 
-        if day:
-            cursor.execute("""
-                SELECT pacienti.* FROM pacienti
-                JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
-                WHERE den_pacient.den_id = ?
-            """, (day,))
-            patients_in_day = cursor.fetchall()
+                cursor.execute("""
+                    SELECT dni.datum AS day_date, pacienti.id AS patient_id, pacienti.meno AS patient_name, pacienti.adresa AS patient_adresa
+                    FROM pacienti
+                    JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
+                    JOIN dni ON den_pacient.den_id = dni.id
+                    WHERE dni.mesiac = ?
+                    ORDER BY dni.datum
+                """, (month_data["id"],))
+
+                patients_by_day = {}
+                for row in cursor.fetchall():
+                    day_date = row["day_date"]
+                    patient_data = {
+                        "patient_id": row["patient_id"],
+                        "patient_name": row["patient_name"],
+                        "patient_address": row["patient_adresa"]
+                    }
+                    if day_date not in patients_by_day:
+                        patients_by_day[day_date] = []
+                    patients_by_day[day_date].append(patient_data)
 
         conn.close()
 
-        return render_template("index.html", 
-                               nurse=nurse, 
-                               month=month_data, 
-                               days=days, 
-                               patients_in_month=patients_in_month, 
-                               patients_in_day=patients_in_day)
+
+        return render_template("index.html",
+                               nurse=nurse,
+                               month=month_data,
+                               days=days,
+                               patients_in_month=patients_in_month,
+                               patients_by_day=patients_by_day
+                            )
 
     except Exception as e:
         flash(f"Chyba: {e}", "danger")
-        return redirect(url_for("detail"))
+        return redirect(url_for("index"))
+
 
 
 
@@ -689,6 +797,8 @@ def initialize_db():
                 nalez TEXT,
                 osetrenie TEXT,
                 vedlajsie_osetrenie TEXT,
+                poznamka1 TEXT,
+                poznamka2 TEXT,
                 koniec_mesiaca TEXT,
                 cislo_dekurzu INTEGER,
                 vypisane BOOLEAN DEFAULT 0,

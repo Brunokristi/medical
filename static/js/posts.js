@@ -85,11 +85,10 @@ function getFlatpickrDate(inputId) {
         let month = String(selectedDate.getMonth() + 1).padStart(2, "0"); // Ensure two digits
         let day = String(selectedDate.getDate()).padStart(2, "0"); // Ensure two digits
 
-        return `${year}-${month}-${day}`; // Return in YYYY-MM-DD format
+        return `${year}-${month}-${day}`;
     }
     return null;
 }
-
 
 
 function postPatientAndSchedule() {
@@ -127,12 +126,10 @@ function postPatientAndSchedule() {
             }
 
             let dateObj = new Date(dateStart);
-
             let year = dateObj.getFullYear();
-            let month = String(dateObj.getMonth() + 1).padStart(2, "0");
+            let month = (dateObj.getMonth() + 1).toString().padStart(2, "0");  // Ensure two-digit format
 
             let schedule = generate(dateStart, dateEnd, frequency);
-
 
             let scheduleData = {
                 sestra: document.getElementById("nurse_id").value,
@@ -152,9 +149,8 @@ function postPatientAndSchedule() {
         })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-
-
+            if (data.redirect) {
+                window.location.href = data.redirect;  // Redirect to the detail page
             } else {
                 alert("Chyba pri ukladaní harmonogramu.");
             }
@@ -163,3 +159,6 @@ function postPatientAndSchedule() {
             console.error("Chyba pri ukladaní pacienta alebo harmonogramu:", error);
         });
 }
+
+
+

@@ -20,19 +20,14 @@
 <body>
     <div class="top">
         <h1>ADOS</h1>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <p class="{{ category }}">{{ message }}</p>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-
         <div class="one-line">
             <h2>{{ nurse['meno'] }}</h2>
             <a href="{{ url_for('index') }}">Odhlásiť sa</a>
         </div>
+    </div>
+
+    <div id="loader" class="loader-overlay">
+        <div class="spinner"></div>
     </div>
 
     <div class="main">
@@ -42,7 +37,7 @@
             
                 <div class="form-group">
                     <label for="month">Mesiac</label>
-                    <input type="month" id="month" required>
+                    <input type="month" id="month" required onchange="updateCalendar()">
                 </div>
             
                 <div class="hidden">
@@ -74,7 +69,7 @@
                 <button class="btn" onclick="postMonth()">Zvoliť mesiac</button>
             </div>
 
-            <div class="section">
+            <div class="section inactive" id="patient-section">
                 <h2 class="lined-heading"><span>Pacient</span></h2>
                 <div class="form-group">
                     <label for="rodne_cislo">Rodné číslo</label>
@@ -140,7 +135,7 @@
                 </div>
             </div>
 
-            <div class="section">
+            <div class="section inactive" id="route-section">
                 <div class="one-line">
                         <button id="prevDay"><i class="bi bi-arrow-left-short"></i></button>
                         <h3 class="selected-date" id="selectedDate">{{ days[0]['datum'] if days else 'Žiadne dátumy' }}</h3>
@@ -155,98 +150,43 @@
                     </select>
                 </div>
 
-                <div id="draggable-container"id="patientList">
-                    {% for patient in patients_in_month %}
-                    <div class="draggable" draggable="true" data-id="{{ patient.id }}">
-                        {{ patient.meno }} ({{ patient.rodne_cislo }})
-                    </div>
-                    {% endfor %}
+                <div id="patientList">
                 </div>
                 
                 <h2 class="lined-heading"><span>Informácia o ceste</span></h2>
-                <table id="route-info" border="1" style="width: 100%; border-collapse: collapse; text-align: center;">
-                </table>
+                
                 
                 <div id="map" style="height: 400px; width: 100%; margin-top: 20px;"></div>
+
+                <div class="checkbox-container">
+                    <input type="checkbox" id="custom-route" name="custom-route" checked onchange="updateRoute()" />
+                    <label for="custom-route">Najoptimálnejšia cesta</label>
+                </div>
+
+                <table  class="route-table" id="route-info"></table>
+
+                <button class="btn" onclick="schedulePatientsMonth()">Uložiť rozpis mesiaca</button>
             </div>
         </div>
 
         <div class="right container">
-            <div class="section">
+            <div class="section inactive" id="dekurz-section">
                 <div class="scroll">
-                    <button class="small-token">
-                        <span>John Doe</span>
+                    {% for patient in patients_in_month %}
+                    <button class="small-token" data-id="{{ patient.id }}">
+                        {{ patient.meno }} ({{ patient.rodne_cislo }})
                     </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
-
-                    <button class="small-token">
-                        <span>John Doe</span>
-                    </button>
+                    {% endfor %}
                 </div>
                 
                 <h2 class="lined-heading"><span>Pacient</span></h2>
 
                 <div class="patient-info">
-                    <p>Meno: Bruno Kristian</p>
-                    <p>Rodné číslo: 12345678901</p>
-                    <p>Adresa: Mieru 1969/1, Lučenec, BC, Slovensko</p>
-                    <p>Poisťovňa: 24 – DÔVERA zdravotná poisťovňa, a. s.</p>
                 </div>
+                <input type="hidden" id="patient_input_id">
+                <input type="hidden" id="start_date_patient">
+                <input type="hidden" id="end_date_patient">
+
 
                 <h2 class="lined-heading"><span>Nález</span></h2>
                 
@@ -267,7 +207,6 @@
                     <div id="selected_dates_1" class="tokens-container"></div>
                     <input type="hidden" id="dates_list_1" name="dates_list_1">
                 </div>
-
                 
                 <div class="form-group">
                     <label for="podtext-2" style="margin-top: 30px;">Doplnkové ošetrenie</label>
@@ -276,9 +215,35 @@
                 
                 <div class="form-group">
                     <label for="date_picker_2">Dátumy vykonania doplnkového ošetrenia</label>
-                    <input class="dates" type="date" id="date_picker_2">
+                    <input class="dates" type="text" id="date_picker_2" placeholder="Vyberte dátumy" readonly>
                     <div id="selected_dates_2" class="tokens-container"></div>
                     <input type="hidden" id="dates_list_2" name="dates_list_2">
+                </div>
+                
+                <!-- ✅ NEW Text Field 1 with Multiple Date Selection -->
+                <div class="form-group">
+                    <label for="podtext-3" style="margin-top: 30px;">Poznámka</label>
+                    <textarea id="podtext-3" name="podtext-3" rows="2"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="date_picker_3">Dátumy</label>
+                    <input class="dates" type="text" id="date_picker_3" placeholder="Vyberte dátumy" readonly>
+                    <div id="selected_dates_3" class="tokens-container"></div>
+                    <input type="hidden" id="dates_list_3" name="dates_list_3">
+                </div>
+                
+                <!-- ✅ NEW Text Field 2 with Multiple Date Selection -->
+                <div class="form-group">
+                    <label for="podtext-4" style="margin-top: 30px;">Poznámka</label>
+                    <textarea id="podtext-4" name="podtext-4" rows="2"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="date_picker_4">Dátumy</label>
+                    <input class="dates" type="text" id="date_picker_4" placeholder="Vyberte dátumy" readonly>
+                    <div id="selected_dates_4" class="tokens-container"></div>
+                    <input type="hidden" id="dates_list_4" name="dates_list_4">
                 </div>
                 
                 <div class="form-group">
@@ -287,27 +252,19 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="date_picker_3">Dátum zhodnotenia na konieci mesiaca</label>
-                    <input class="dates" type="date" id="date_picker_3">
-                    <div id="selected_dates_3" class="tokens-container"></div>
-                    <input type="hidden" id="dates_list_3" name="dates_list_3">
-                </div>
-                
-                <div class="form-group">
-                    <label for="entry_number" style="margin-top: 30px;">Číslo dekurzu</label>
-                    <input type="number" id="entry_number" name="entry_number" oninput="validateNumberInput(this)" required>
+                    <label for="date_picker_5">Dátum zhodnotenia na koniec mesiaca</label>
+                    <input class="dates" type="text" id="date_picker_5" placeholder="Vyberte dátum" readonly>
+                    <div id="selected_dates_5" class="tokens-container"></div>
+                    <input type="hidden" id="dates_list_5" name="dates_list_5">
                 </div>
 
-                <h2 class="lined-heading"><span>Pracovník a spoločnosť</span></h2>
-                
-                
                 <div class="form-group">
-                    <label for="name_worker">Meno vypĺňajúceho</label>
-                    <input type="text" id="name_worker" name="name_worker" required>
-                </div>
+                    <label for="entry_number" style="margin-top: 30px;">Číslo dekurzu</label>
+                    <input type="number" id="entry_number" name="entry_number" required>
+                </div>                
                 
                 <div style="display: flex; justify-content: flex-end;">
-                    <button type="button" class="btn" onclick="generateSchedule()">Vytvoriť Dekurz</button>
+                    <button type="button" class="btn" onclick="updateForDekurz()">Vytvoriť Dekurz</button>
                 </div>
             </div>
         </div>
@@ -322,8 +279,15 @@
     let patientMarkers = [];
     let selectedDates = [];
     let month = "{{ month.mesiac }}" || null;
+    let start = "{{ month.vysetrenie_start }}" || null;
+    let end = "{{ month.vysetrenie_koniec }}" || null;
+    let write_start = "{{ month.vypis_start }}" || null;
+    let write_end = "{{ month.vypis_koniec }}" || null;
     let year = "{{ month.rok }}" || null;
     let days = JSON.parse('{{ days | tojson | safe }}');
+    let patients_by_day = JSON.parse('{{ patients_by_day | tojson | safe }}');
+    let patients_in_month = JSON.parse('{{ patients_in_month | tojson | safe }}');
+
 
     window.onload = function () {
         setTodayDate();
@@ -441,6 +405,20 @@
         let today = new Date().toISOString().split("T")[0];
         if (month && year) {
             document.getElementById("month").value = `${year}-${String(month).padStart(2, '0')}`;
+            document.getElementById("patient-section").classList.remove("inactive");
+            document.getElementById("route-section").classList.remove("inactive");
+        }
+        if (start) {
+            document.getElementById("zs_start_time").value = start;
+        }
+        if (end) {
+            document.getElementById("zs_end_time").value = end;
+        }
+        if (write_start) {
+            document.getElementById("write_start_time").value = write_start;
+        }
+        if (write_end) {
+            document.getElementById("write_end_time").value = write_end;
         }
     }
 
@@ -496,16 +474,6 @@
         document.getElementById("meno").value = "";
         document.getElementById("rodne_cislo").value = "";
         document.getElementById("adresa").value = "";
-        // document.getElementById("date_start").value = "";
-        // document.getElementById("date_end").value = "";
-
-        // // If using Flatpickr, clear the selected date
-        // if (document.getElementById("date_start")._flatpickr) {
-        //     document.getElementById("date_start")._flatpickr.clear();
-        // }
-        // if (document.getElementById("date_end")._flatpickr) {
-        //     document.getElementById("date_end")._flatpickr.clear();
-        // }
 
         setSelectValue(poistovna, "24 - DÔVERA zdravotná poisťovňa, a. s.");
         setSelectValue(schedule, "každý deň");
@@ -527,7 +495,7 @@
         );
     }
 
-    // vyber z roznych adries
+    //vyber adresy z moznosti
     document.addEventListener("click", function (event) {
         const suggestionsContainer = document.getElementById("address-suggestions");
         if (!event.target.closest("#adresa")) {
@@ -535,32 +503,39 @@
         }
     });
 
-    // tlacitka na dni v mesiaci
+    //zmena dni vpravo vlavo
     document.addEventListener("DOMContentLoaded", function () {
         let selectedDateElement = document.getElementById("selectedDate");
         let prevButton = document.getElementById("prevDay");
         let nextButton = document.getElementById("nextDay");
+        let patientList = document.getElementById("patientList");
 
         if (!Array.isArray(days) || days.length === 0) {
-            selectedDateElement.textContent = "No Dates";
+            selectedDateElement.textContent = "Žiadne dátumy";
             prevButton.disabled = true;
             nextButton.disabled = true;
             return;
         }
 
         let currentIndex = 0;
-        selectedDateElement.textContent = days[currentIndex].datum;  // Set initial date
+        selectedDateElement.textContent = days[currentIndex].datum;
 
         function updateDate() {
-            selectedDateElement.textContent = days[currentIndex].datum;
+            let selectedDate = days[currentIndex].datum;
+            selectedDateElement.textContent = selectedDate;
             prevButton.disabled = currentIndex === 0;
             nextButton.disabled = currentIndex === days.length - 1;
+
+            // Fetch patients for the selected date
+            updatePatientList(selectedDate);
         }
 
         prevButton.addEventListener("click", function () {
             if (currentIndex > 0) {
                 currentIndex--;
                 updateDate();
+                updateRoute();
+
             }
         });
 
@@ -568,8 +543,27 @@
             if (currentIndex < days.length - 1) {
                 currentIndex++;
                 updateDate();
+                updateRoute();
+
             }
         });
+
+        function updatePatientList(selectedDate) {
+            patientList.innerHTML = "";
+
+            if (patients_by_day[selectedDate]) {
+                patients_by_day[selectedDate].forEach(patient => {
+                    let patientToken = document.createElement("div");
+                    patientToken.classList.add("draggable", "token");
+                    patientToken.setAttribute("draggable", "true");
+                    patientToken.setAttribute("data-id", patient.patient_id);
+                    patientToken.setAttribute("data-address", patient.patient_address);
+                    patientToken.textContent = `${patient.patient_name}`;
+
+                    patientList.appendChild(patientToken);
+                });
+            }
+        }
 
         updateDate();
     });
@@ -579,8 +573,6 @@
         let firstDay = new Date(year, month - 1, 1);
         let lastDay = new Date(year, month, 0);
 
-        console.log(firstDay, lastDay);
-
         flatpickr("#date_start", {
             dateFormat: "d-m-Y",
             enableTime: false,
@@ -588,8 +580,8 @@
             allowInput: true,
             minDate: firstDay,
             maxDate: lastDay,
-            onChange: function (selectedDates, dateStr, instance) {
-                console.log("Selected Date Start:", selectedDates);
+            locale: {
+                firstDayOfWeek: 1
             }
         });
 
@@ -600,25 +592,11 @@
             allowInput: true,
             minDate: firstDay,
             maxDate: lastDay,
-            onChange: function (selectedDates, dateStr, instance) {
-                console.log("Selected Date End:", selectedDates); // Debugging
+            locale: {
+                firstDayOfWeek: 1
             }
         });
     }
-
-    //pri zmene mesiaca
-    document.getElementById("month").addEventListener("change", updateCalendar);
-
-    
-    
-
-
-
-
-
-
-
-    
 
     function fetchSuggestions() {
         const input = document.getElementById("adresa");
@@ -683,6 +661,8 @@
     }
 
     async function updateRoute() {
+        let customRouteCheckbox = document.getElementById("custom-route");
+
         patientMarkers.forEach(marker => marker.setMap(null));
         patientMarkers = [];
 
@@ -707,7 +687,6 @@
         }
 
         if (waypoints.length === 0) {
-            console.warn("Not enough waypoints to generate a route.");
             return;
         }
 
@@ -715,7 +694,7 @@
             origin: startAddress,
             destination: startAddress,
             waypoints: waypoints,
-            optimizeWaypoints: true,
+            optimizeWaypoints: customRouteCheckbox.checked,
             travelMode: google.maps.TravelMode.DRIVING
         };
 
@@ -748,70 +727,45 @@
         let table = document.getElementById("route-info");
         table.innerHTML = "";
 
-        let totalDistance = 0;
-        let totalTime = 0;
-        const waitTime = 20; // ✅ Time spent at each location in minutes
+        let startTimeInput = document.getElementById("zs_start_time").value;
+        let writeStartTimeInput = document.getElementById("write_start_time").value;
 
-        let headerRow = `
-<tr>
-    <th>#</th>
-    <th>From</th>
-    <th>To</th>
-    <th>Distance (km)</th>
-    <th>Travel Time (min)</th>
-    <th>Wait Time (min)</th>
-</tr>`;
-        table.innerHTML += headerRow;
+        let startTime = new Date(`1970-01-01T${startTimeInput}:00`);
+        let writeStartTime = new Date(`1970-01-01T${writeStartTimeInput}:00`);
+
+        const waitTime = 20;
+        const writeTimeIncrease = 5;
 
         let legs = result.routes[0].legs;
+        let totalTime = 0;
+        let totalDistance = 0;
 
         for (let i = 0; i < legs.length; i++) {
             let leg = legs[i];
+            let duration = leg.duration ? Math.round(leg.duration.value / 60) : 0;
+            let end = leg.end_address;
 
-            let distance = leg.distance ? (leg.distance.value / 1000).toFixed(2) : "-";
-            let duration = leg.duration ? (leg.duration.value / 60).toFixed(2) : "-";
+            let arrivalTime = new Date(startTime);
+            arrivalTime.setMinutes(arrivalTime.getMinutes() + duration + waitTime);
 
-            totalDistance += parseFloat(distance);
-            totalTime += parseFloat(duration) + (i < legs.length - 1 ? waitTime : 0); // ✅ Add wait time except for the final return leg
+            let patientWriteTime = new Date(writeStartTime);
+            patientWriteTime.setMinutes(patientWriteTime.getMinutes() + writeTimeIncrease);
 
-            let row = `<tr>
-        <td>${i + 1}</td>
-        <td>${leg.start_address}</td>
-        <td>${leg.end_address}</td>
-        <td>${distance}</td>
-        <td>${duration}</td>
-        <td>${i < legs.length - 1 ? waitTime : "-"}</td> <!-- ✅ No wait time at final return -->
+            let formattedArrivalTime = `${arrivalTime.getHours().toString().padStart(2, "0")}:${arrivalTime.getMinutes().toString().padStart(2, "0")}`;
+            let formattedWriteTime = `${patientWriteTime.getHours().toString().padStart(2, "0")}:${patientWriteTime.getMinutes().toString().padStart(2, "0")}`;
+
+            startTime.setMinutes(startTime.getMinutes() + duration + waitTime);
+            writeStartTime.setMinutes(writeStartTime.getMinutes() + writeTimeIncrease);
+
+            let row = `
+    <tr>
+        <td>${i + 1}.</td>
+        <td>${end}</td>
+        <td>${formattedArrivalTime}</td>
+        <td>${formattedWriteTime}</td>
     </tr>`;
             table.innerHTML += row;
         }
-
-        // ✅ Correct return leg (from last visited address back to the starting address)
-        let lastVisitedAddress = legs[legs.length - 1].end_address;
-        let startingAddress = legs[0].start_address;
-
-        let returnDistance = legs[legs.length - 1].distance ? (legs[legs.length - 1].distance.value / 1000).toFixed(2) : "-";
-        let returnDuration = legs[legs.length - 1].duration ? (legs[legs.length - 1].duration.value / 60).toFixed(2) : "-";
-
-        totalDistance += parseFloat(returnDistance);
-        totalTime += parseFloat(returnDuration); // ✅ No additional stop time at final return
-
-        let returnRow = `<tr>
-    <td>${legs.length + 1}</td>
-    <td>${lastVisitedAddress}</td>
-    <td>${startingAddress}</td>
-    <td>${returnDistance}</td>
-    <td>${returnDuration}</td>
-    <td>-</td> <!-- ✅ No wait time at final return -->
-</tr>`;
-        table.innerHTML += returnRow;
-
-        let totalRow = `<tr style="font-weight: bold;">
-    <td colspan="3">Total</td>
-    <td>${totalDistance.toFixed(2)} km</td>
-    <td>${totalTime.toFixed(2)} min</td>
-    <td>-</td>
-</tr>`;
-        table.innerHTML += totalRow;
     }
 
     function initAutocomplete() {
@@ -833,9 +787,6 @@
         });
     }
 
-    // pri zmene adresy
-    document.getElementById("start").addEventListener("change", updateRoute);
-
     // vytvorit mapu pri nacitani stranky
     document.addEventListener("DOMContentLoaded", function () {
         initMap();
@@ -852,142 +803,317 @@
         });
     });
 
-    //vyber datumu s obmedzeniami
+    //vyber datumu s obmedzeniami napravo
     document.addEventListener("DOMContentLoaded", function () {
-            const dateInput = document.getElementById("date_picker_1");
-            const selectedDatesContainer = document.getElementById("selected_dates_1");
-            const hiddenInput = document.getElementById("dates_list_1");
+        let firstDay = new Date(year, month - 1, 1);
+        let lastDay = new Date(year, month, 0);
 
-            // Define disabled dates
-            const disabledDates = ["2025-02-25", "2025-02-28"]; // Change these to real disabled dates
+        document.getElementById("start_date_patient").value = firstDay.toLocaleDateString("sv-SE");
+        document.getElementById("end_date_patient").value = lastDay.toLocaleDateString("sv-SE");
 
-            // Flatpickr Configuration
-            const calendar = flatpickr(dateInput, {
-                mode: "multiple", // Allow multiple date selection
-                dateFormat: "Y-m-d", // Display format
-                minDate: "today", // Prevent selecting past dates
-                disable: disabledDates, // Disable specific dates
-                onChange: function (selectedDates) {
-                    // Clear previous tokens
-                    selectedDatesContainer.innerHTML = "";
+        function applyFlatpickr(inputId, multiple = false) {
+            flatpickr(inputId, {
+                mode: multiple ? "multiple" : "single",
+                dateFormat: "Y-m-d",
+                minDate: firstDay,
+                maxDate: lastDay,
+                enableTime: false,
+                locale: {
+                    firstDayOfWeek: 1
+                },
+                onChange: function (selectedDates, dateStr, instance) {
+                    let selectedContainer = document.getElementById(`selected_dates_${inputId.split("_")[2]}`);
+                    let hiddenInput = document.getElementById(`dates_list_${inputId.split("_")[2]}`);
+
+                    // Clear previous selections
+                    selectedContainer.innerHTML = "";
 
                     // Create tokens for selected dates
+                    let selectedValues = [];
                     selectedDates.forEach(date => {
+                        let formattedDate = date.toLocaleDateString("sv-SE"); // ✅ Ensures correct YYYY-MM-DD format
+
+                        selectedValues.push(formattedDate);
+
                         let token = document.createElement("span");
-                        token.classList.add("date-token");
-                        token.textContent = date.toISOString().split("T")[0];
+                        token.classList.add("small-token");
+                        token.textContent = formattedDate;
 
                         // Remove date on click
                         token.addEventListener("click", function () {
-                            calendar.setDate(
-                                calendar.selectedDates.filter(d => d.toISOString().split("T")[0] !== token.textContent),
-                                true
-                            );
+                            selectedValues = selectedValues.filter(d => d !== formattedDate);
+                            hiddenInput.value = selectedValues.join(",");
+                            token.remove();
                         });
 
-                        selectedDatesContainer.appendChild(token);
+                        selectedContainer.appendChild(token);
                     });
 
-                    // Update hidden input value with selected dates
-                    hiddenInput.value = selectedDates.map(date => date.toISOString().split("T")[0]).join(",");
+                    // Update hidden input with selected dates
+                    hiddenInput.value = selectedValues.join(",");
                 }
             });
-
-            // Custom styles to color selected days in the calendar
-            document.head.insertAdjacentHTML("beforeend", `
-        <style>
-            .date-token {
-                display: inline-block;
-                background-color: #007bff;
-                color: white;
-                padding: 5px 10px;
-                margin: 3px;
-                border-radius: 5px;
-                cursor: pointer;
-            }
-            .date-token:hover {
-                background-color: #0056b3;
-            }
-            .flatpickr-day.selected {
-                background: #007bff !important; /* Change selected day color */
-                color: white !important;
-            }
-            .flatpickr-day.disabled {
-                background: #ff6b6b !important; /* Change disabled day color */
-                color: white !important;
-                pointer-events: none;
-            }
-        </style>
-    `);
-        });
-
-
-
-
-
-
-
-    function handleAddPatient() {
-            const patient = {
-                rc: document.getElementById("rodne_cislo").value.trim(),
-                name: document.getElementById("meno").value.trim(),
-                address: document.getElementById("adresa").value.trim(),
-                insurance: document.getElementById("poistovna").value.trim(),
-                dateStart: document.getElementById("date_start").value,
-                dateEnd: document.getElementById("date_end").value,
-                schedule: document.getElementById("schedule").value,
-            };
-
-            // Validate required fields
-            if (!patient.rc || !patient.name || !patient.address || !patient.dateStart || !patient.dateEnd) {
-                alert("Vyplňte všetky povinné údaje pacienta.");
-                return;
-            }
-
-            addPatientToList(patient);
         }
 
-    function addPatientToList(patient) {
-        let container = document.getElementById("draggable-container");
+        // Apply Flatpickr to each date picker
+        applyFlatpickr("#date_picker_1", true);
+        applyFlatpickr("#date_picker_2", true);
+        applyFlatpickr("#date_picker_3", true);
+        applyFlatpickr("#date_picker_4", true);
+        applyFlatpickr("#date_picker_5", false);
+    });
 
-        let existingToken = [...container.children].find(div => div.dataset.rc === patient.rc);
-        if (existingToken) return;
+    async function schedulePatientsMonth() {
+        const loader = document.getElementById("loader");
+        loader.classList.add("loader-active"); // ✅ Show loader before starting
 
-        let token = document.createElement("div");
-        token.classList.add("token");
-        token.dataset.rc = patient.rc;
-        token.dataset.address = patient.address;
-        token.draggable = true;
+        let customRouteCheckbox = document.getElementById("custom-route");
+        let startAddress = document.getElementById("start").value;
+        let startCoords = await geocodeAddress(startAddress);
+        let sestra_id = document.getElementById("nurse_id").value;
 
-        // Patient details
-        token.innerHTML = `<span>${patient.name} - ${patient.rc} - ${patient.address}</span>`;
+        if (!startCoords) {
+            console.warn("Invalid start location.");
+            loader.classList.remove("loader-active"); // ✅ Hide loader on error
+            return;
+        }
 
-        // Create button container
-        let buttonContainer = document.createElement("div");
-        buttonContainer.classList.add("button-container");
+        let generatedSchedule = [];
 
-        // Remove button
-        let removeBtn = document.createElement("button");
-        removeBtn.classList.add("remove-btn");
-        removeBtn.innerHTML = `<i class="bi bi-x"></i>`;
-        removeBtn.onclick = function () {
-            container.removeChild(token);
-            updateRoute();
+        for (let day of days) {
+            let selectedDate = day.datum;
+            let waypoints = [];
+
+            if (!patients_by_day[selectedDate] || patients_by_day[selectedDate].length === 0) {
+                console.warn(`No patients scheduled for ${selectedDate}.`);
+                continue;
+            }
+
+            let originalWaypoints = [];
+
+            for (let patient of patients_by_day[selectedDate]) {
+                let address = patient.patient_address;
+                let coords = await geocodeAddress(address);
+
+                if (coords) {
+                    let waypoint = { location: address, patient_id: patient.patient_id };
+                    waypoints.push({ location: address });
+                    originalWaypoints.push(waypoint);
+                }
+            }
+
+            if (waypoints.length === 0) {
+                console.warn(`No valid addresses for ${selectedDate}.`);
+                continue;
+            }
+
+            let request = {
+                origin: startAddress,
+                destination: startAddress,
+                waypoints: waypoints,
+                optimizeWaypoints: customRouteCheckbox.checked,
+                travelMode: google.maps.TravelMode.DRIVING
+            };
+
+            await new Promise((resolve) => {
+                directionsService.route(request, async function (result, status) {
+                    if (status === google.maps.DirectionsStatus.OK) {
+                        let optimizedWaypointsOrder = result.routes[0].waypoint_order;
+                        let reorderedWaypoints = optimizedWaypointsOrder.map(index => originalWaypoints[index]);
+
+                        let scheduleData = await processRouteTimes(result, selectedDate, reorderedWaypoints);
+                        generatedSchedule.push(...scheduleData);
+                    } else {
+                        console.error(`Error fetching route for ${selectedDate}:`, status);
+                    }
+                    resolve(); // ✅ Ensure we wait for all API calls
+                });
+            });
+        }
+
+        setTimeout(() => {
+            sendScheduleToBackend(generatedSchedule, sestra_id);
+            loader.classList.remove("loader-active"); // ✅ Hide loader after request is complete
+        }, 3000);
+    }
+
+    async function processRouteTimes(result, selectedDate, waypoints) {
+        let startTimeInput = document.getElementById("zs_start_time").value;
+        let writeStartTimeInput = document.getElementById("write_start_time").value;
+
+        let startTime = new Date(`1970-01-01T${startTimeInput}:00`);
+        let writeStartTime = new Date(`1970-01-01T${writeStartTimeInput}:00`);
+
+        const waitTime = 20;
+        const writeTimeIncrease = 5;
+
+        let legs = result.routes[0].legs;
+        let scheduleData = [];
+
+        for (let i = 0; i < legs.length; i++) {
+            let leg = legs[i];
+
+            if (!waypoints[i]) {
+                console.warn(`Missing waypoint for leg ${i}`);
+                continue;
+            }
+
+            let patientId = waypoints[i].patient_id;
+
+            let arrivalTime = new Date(startTime);
+            arrivalTime.setMinutes(arrivalTime.getMinutes() + Math.round(leg.duration.value / 60));
+
+            let patientWriteTime = new Date(writeStartTime);
+            patientWriteTime.setMinutes(patientWriteTime.getMinutes() + writeTimeIncrease);
+
+            let formattedArrivalTime = `${arrivalTime.getHours().toString().padStart(2, "0")}:${arrivalTime.getMinutes().toString().padStart(2, "0")}`;
+            let formattedWriteTime = `${patientWriteTime.getHours().toString().padStart(2, "0")}:${patientWriteTime.getMinutes().toString().padStart(2, "0")}`;
+
+            startTime.setMinutes(startTime.getMinutes() + Math.round(leg.duration.value / 60) + waitTime);
+            writeStartTime.setMinutes(writeStartTime.getMinutes() + writeTimeIncrease);
+
+            scheduleData.push({
+                patient_id: patientId,
+                date: selectedDate,
+                arrival_time: formattedArrivalTime,
+                write_time: formattedWriteTime
+            });
+        }
+
+        return scheduleData;
+    }
+
+    function sendScheduleToBackend(scheduleData, sestra_id) {
+        console.log("Sending schedule to backend:", scheduleData);
+        fetch("/update_schedule", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ schedule: scheduleData, sestra_id: sestra_id })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById("dekurz-section").classList.remove("inactive");
+                } else {
+                    alert("Chyba pri vytváraní rozvrhu: " + data.error);
+                }
+            })
+            .catch(error => {
+                console.error("Chyba pri vytváraní rozvrhu:", error);
+            });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const patientButtons = document.querySelectorAll(".small-token");
+        const patientInfoDiv = document.querySelector(".patient-info");
+
+        // Convert patients_in_month into an object for easy lookup
+        let patientData = {};
+        patients_in_month.forEach(patient => {
+            patientData[patient.id] = patient;
+        });
+
+        // Add event listener to each button
+        patientButtons.forEach(button => {
+            button.addEventListener("click", function () {
+                let patientId = this.getAttribute("data-id");
+
+                if (patientId in patientData) {
+                    let patient = patientData[patientId];
+
+                    // Update the patient-info div with the clicked patient's details
+                    patientInfoDiv.innerHTML = `
+                        <p><strong>Meno:</strong> ${patient.meno}</p>
+                        <p><strong>Rodné číslo:</strong> ${patient.rodne_cislo}</p>
+                        <p><strong>Adresa:</strong> ${patient.adresa}</p>
+                        <p><strong>Poisťovňa:</strong> ${patient.poistovna}</p>
+                    `;
+
+                    // Populate hidden input with patient ID
+                    document.getElementById("patient_input_id").value = patientId;
+
+                    // Populate additional field
+                    document.getElementById("hl-text").value = patient.nalez;
+                    document.getElementById("podtext-1").value = patient.osetrenie;
+                    document.getElementById("podtext-2").value = patient.vedlajsie_osetrenie;
+                    document.getElementById("podtext-3").value = patient.poznamka1;
+                    document.getElementById("podtext-4").value = patient.poznamka2;
+                    document.getElementById("koniec-mesiaca").value = patient.koniec_mesiaca;
+                    document.getElementById("entry_number").value = patient.cislo_dekurzu;
+                    document.getElementById("date_picker_1").value = "";
+                    document.getElementById("date_picker_2").value = "";
+                    document.getElementById("date_picker_3").value = "";
+                    document.getElementById("date_picker_4").value = "";
+                    document.getElementById("date_picker_5").value = "";
+
+
+                } else {
+                    console.warn("Patient not found in preloaded data.");
+                }
+            });
+        });
+    });
+
+    async function updateForDekurz() {
+        let patientData = {
+            patient_id: document.getElementById("patient_input_id").value,
+            nalez: document.getElementById("hl-text").value,
+            podtext_1: document.getElementById("podtext-1").value,
+            dates_list_1: document.getElementById("dates_list_1").value.split(",").filter(d => d), // Remove empty values
+            podtext_2: document.getElementById("podtext-2").value,
+            dates_list_2: document.getElementById("dates_list_2").value.split(",").filter(d => d),
+            podtext_3: document.getElementById("podtext-3").value,
+            dates_list_3: document.getElementById("dates_list_3").value.split(",").filter(d => d),
+            podtext_4: document.getElementById("podtext-4").value,
+            dates_list_4: document.getElementById("dates_list_4").value.split(",").filter(d => d),
+            koniec_mesiaca: document.getElementById("koniec-mesiaca").value,
+            date_picker_5: document.getElementById("dates_list_5").value,
+            entry_number: document.getElementById("entry_number").value,
+            nurse_id: document.getElementById("nurse_id").value,
+            start: document.getElementById("start_date_patient").value,
+            end: document.getElementById("end_date_patient").value,
         };
 
-        // let dragBtn = document.createElement("button");
-        // dragBtn.classList.add("drag-btn");
-        // dragBtn.innerHTML = `<i class="bi bi-grip-vertical"></i>`;
+        try {
+            let response = await fetch("/update_patient", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patientData)
+            });
 
-        buttonContainer.appendChild(removeBtn);
-        // buttonContainer.appendChild(dragBtn);
+            let data = await response.json();
 
-        token.appendChild(buttonContainer);
-        container.appendChild(token);
-
-        // applyDragAndDrop();
-        updateRoute();
+            if (data.success) {
+                setTimeout(() => {
+                    generateSchedule(patientData);
+                }, 1000);
+            } else {
+                alert("Error updating patient: " + data.error);
+            }
+        } catch (error) {
+            console.error("Error updating patient:", error);
+        }
     }
+
+    async function generateSchedule(patientData) {
+        try {
+            console.log("Sending data to generate schedule:", patientData);
+
+            let response = await fetch("/generate_schedule", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patientData)
+            });
+
+        } catch (error) {
+            console.error("Error generating schedule:", error);
+        }
+    }
+
+
+
 
     // function applyDragAndDrop() {
     //     let items = document.querySelectorAll(".token");
@@ -1039,50 +1165,4 @@
     // }
 
     // document.addEventListener("DOMContentLoaded", applyDragAndDrop);
-
-    function generateSchedule() {
-        let data = {
-            meno: document.getElementById("meno").value.trim(),
-            rodne_cislo: document.getElementById("rodne_cislo").value.trim(),
-            adresa: document.getElementById("adresa").value.trim(),
-            poistovna: document.getElementById("poistovna").value.trim(),
-            date_start: document.getElementById("date_start").value.trim(),
-            date_end: document.getElementById("date_end").value.trim(),
-            zs_start_time: document.getElementById("zs_start_time").value.trim(),
-            zs_end_time: document.getElementById("zs_end_time").value.trim(),
-            write_start_time: document.getElementById("write_start_time").value.trim(),
-            write_end_time: document.getElementById("write_end_time").value.trim(),
-            schedule: document.getElementById("schedule").value.trim(),
-            name_worker: document.getElementById("name_worker").value.trim(),
-            company: document.getElementById("company").value.trim(),
-            hl_text: document.getElementById("hl-text").value.trim(),
-            podtext_1: document.getElementById("podtext-1").value.trim(),
-            dates_podtext_1: document.getElementById("dates_list_1").value.trim(),
-            podtext_2: document.getElementById("podtext-2").value.trim(),
-            dates_podtext_2: document.getElementById("dates_list_2").value.trim(),
-            koniec_mesiaca: document.getElementById("koniec-mesiaca").value.trim(),
-            dates_koniec_mesiaca: document.getElementById("dates_list_3").value.trim(),
-            entry_number: document.getElementById("entry_number").value.trim()
-        };
-
-        fetch("http://127.0.0.1:5000/generate_schedule", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert("Chyba: " + data.error);
-                } else {
-                }
-            })
-            .catch(error => {
-                console.error("Chyba pri generovaní rozvrhu:", error);
-            });
-    }
-
-    setupDatePicker("date_picker_1", "selected_dates_1", "dates_list_1");
-    setupDatePicker("date_picker_2", "selected_dates_2", "dates_list_2");
-    setupDatePicker("date_picker_3", "selected_dates_3", "dates_list_3");
 </script>
