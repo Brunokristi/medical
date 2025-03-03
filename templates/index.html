@@ -381,7 +381,6 @@
         document.getElementById("adresa").value = patient.address;
         setSelectValue("poistovna", patient.insurance);
         setSelectValue("company", patient.company);
-        document.getElementById("name_worker").value = patient.worker;
 
         // Populate additional fields
         document.getElementById("hl-text").value = patient.hl_text;
@@ -768,29 +767,9 @@
         }
     }
 
-    function initAutocomplete() {
-        let input = document.getElementById("adresa");
-
-        const autocomplete = new google.maps.places.Autocomplete(input, {
-            types: ["geocode"],
-            componentRestrictions: { country: "SK" }
-        });
-
-        autocomplete.addListener("place_changed", function () {
-            let place = autocomplete.getPlace();
-            if (!place.geometry) {
-                console.log("No details available for input:", input.value);
-                return;
-            }
-
-            input.value = place.formatted_address;
-        });
-    }
-
     // vytvorit mapu pri nacitani stranky
     document.addEventListener("DOMContentLoaded", function () {
         initMap();
-        initAutocomplete();
     });
 
     // horizontal scroll
@@ -960,11 +939,15 @@
 
             let patientId = waypoints[i].patient_id;
 
+            function getRandomTimeOffset() {
+                return Math.floor(Math.random() * 31) - 30;
+            }
+
             let arrivalTime = new Date(startTime);
-            arrivalTime.setMinutes(arrivalTime.getMinutes() + Math.round(leg.duration.value / 60));
+            arrivalTime.setMinutes(arrivalTime.getMinutes() + Math.round(leg.duration.value / 60) + getRandomTimeOffset());
 
             let patientWriteTime = new Date(writeStartTime);
-            patientWriteTime.setMinutes(patientWriteTime.getMinutes() + writeTimeIncrease);
+            patientWriteTime.setMinutes(patientWriteTime.getMinutes() + writeTimeIncrease + getRandomTimeOffset());
 
             let formattedArrivalTime = `${arrivalTime.getHours().toString().padStart(2, "0")}:${arrivalTime.getMinutes().toString().padStart(2, "0")}`;
             let formattedWriteTime = `${patientWriteTime.getHours().toString().padStart(2, "0")}:${patientWriteTime.getMinutes().toString().padStart(2, "0")}`;

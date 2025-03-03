@@ -23,14 +23,6 @@
             Pridať nového pracovníka
         </h2>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <p class="{{ category }}">{{ message }}</p>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-
         <form class="one-line" action="/add_nurse" method="POST">
             <input type="text" placeholder="Meno pracovníka" name="meno" required>
             <button class="btn" type="submit">Pridat pracovníka</button>
