@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, send_file, render_template, redirect, url_for, flash
 from flask_cors import CORS
-import datetime
 import random
 import re
 import os
@@ -12,13 +11,10 @@ import platform
 import subprocess
 import webbrowser
 import threading
-import os
 import sys
 import sqlite3
 from datetime import datetime, timedelta
 import calendar
-
-
 
 
 app = Flask(__name__)
@@ -35,6 +31,11 @@ def replace_slovak_chars(text):
     if isinstance(text, bytes):
         text = text.decode('utf-8')
     return "".join(replacements.get(char, char) for char in text)
+
+
+def split_by_chars(text, char_limit):
+    return [text[i:i + char_limit] for i in range(0, len(text), char_limit)]
+
 
 def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, hl_text, podtext_1, podtext_2, koniec_mesiaca):
     if os.name == "nt":  # Windows
@@ -84,8 +85,15 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
         c.drawString(400, height - 120, replace_slovak_chars("Rodné číslo:"))
 
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(55, height - 140, meno)
-        c.drawString(400, height - 140, rodne_cislo)
+        c.drawString(55, height - 140, replace_slovak_chars(meno))
+        c.drawString(400, height - 140, replace_slovak_chars(rodne_cislo))
+        if (poistovna == "24 – DÔVERA zdravotná poisťovňa, a. s."):
+            c.drawString(400, height - 160, replace_slovak_chars("24"))
+        elif (poistovna == "25 – VŠEOBECNÁ zdravotná poisťovňa, a. s."):
+            c.drawString(400, height - 160, replace_slovak_chars("25"))
+        elif (poistovna == "27 – UNION zdravotná poisťovňa, a. s."):
+            c.drawString(400, height - 160, replace_slovak_chars("27"))
+
 
         # Draw separation lines
         c.rect(50, height - 150, width - 100, 40, stroke=1, fill=0)
@@ -107,7 +115,8 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
 
     draw_header()
     c.setFont("Helvetica", 10)
-    y_position = height - 200  
+    y_position = height - 200
+    char_limit = 50 
 
     for date, zs_time, write_time, text in editable_schedule:
         text = zs_time + ": " + text
@@ -117,8 +126,11 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
 
         text_lines = text.split("\n")  # Handle multi-line text manually
         for line in text_lines:
-            c.drawString(150, y_position, replace_slovak_chars(line))
-            y_position -= 15
+            wrapped_lines = split_by_chars(replace_slovak_chars(line), char_limit)
+            for wrapped_line in wrapped_lines:
+                c.drawString(150, y_position, wrapped_line)
+                y_position -= 15 
+
 
         # Nurse's Signature
         c.setFont("Helvetica-Bold", 10)
