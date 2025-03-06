@@ -1095,6 +1095,18 @@
         }
     }
 
+    var socket = io.connect("http://localhost:5000");
+
+    document.addEventListener("visibilitychange", function () {
+        if (document.hidden) {
+            console.log("Tab is hidden, but not closed.");
+        }
+    });
+
+    window.addEventListener("unload", function () {
+        console.log("Window is being closed.");
+        socket.disconnect();  // Triggers server shutdown only on real close
+    });
 
 
 

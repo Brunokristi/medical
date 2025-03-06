@@ -15,18 +15,24 @@ import sys
 import sqlite3
 from datetime import datetime, timedelta
 import calendar
+from reportlab.lib.utils import simpleSplit
+from flask_socketio import SocketIO
+
 
 
 app = Flask(__name__)
 CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 DATABASE_FILE = "ados_database.db"
 app.secret_key = "a3f8d3e87b5a4e5f9c6d4b2f6a1e8c3d"
 
 def replace_slovak_chars(text):
     replacements = {
-        "č": "c", "ť": "t", "ž": "z", "ý": "y", "ú": "u", "ľ": "l",
-        "ď": "d", "ň": "n", "ó": "o", "ř": "r", "ě": "e"
+        "č": "c", "Č": "C", "ť": "t", "Ť": "T", "ž": "z", "Ž": "Z",
+        "ý": "y", "Ý": "Y", "ú": "u", "Ú": "U", "ľ": "l", "Ľ": "L",
+        "ď": "d", "Ď": "D", "ň": "n", "Ň": "N", "ó": "o", "Ó": "O",
+        "ř": "r", "Ř": "R", "ě": "e", "Ě": "E"
     }
     if isinstance(text, bytes):
         text = text.decode('utf-8')
@@ -36,6 +42,9 @@ def replace_slovak_chars(text):
 def split_by_chars(text, char_limit):
     return [text[i:i + char_limit] for i in range(0, len(text), char_limit)]
 
+
+from reportlab.lib.utils import simpleSplit
+from reportlab.lib.pagesizes import A4
 
 def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, hl_text, podtext_1, podtext_2, koniec_mesiaca):
     if os.name == "nt":  # Windows
@@ -88,12 +97,11 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
         c.drawString(55, height - 140, replace_slovak_chars(meno))
         c.drawString(400, height - 140, replace_slovak_chars(rodne_cislo))
         if (poistovna == "24 – DÔVERA zdravotná poisťovňa, a. s."):
-            c.drawString(400, height - 160, replace_slovak_chars("24"))
+            c.drawString(500, height - 140, replace_slovak_chars("24"))
         elif (poistovna == "25 – VŠEOBECNÁ zdravotná poisťovňa, a. s."):
-            c.drawString(400, height - 160, replace_slovak_chars("25"))
+            c.drawString(500, height - 140, replace_slovak_chars("25"))
         elif (poistovna == "27 – UNION zdravotná poisťovňa, a. s."):
-            c.drawString(400, height - 160, replace_slovak_chars("27"))
-
+            c.drawString(500, height - 140, replace_slovak_chars("27"))
 
         # Draw separation lines
         c.rect(50, height - 150, width - 100, 40, stroke=1, fill=0)
@@ -116,30 +124,48 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
     draw_header()
     c.setFont("Helvetica", 10)
     y_position = height - 200
-    char_limit = 50 
+    page_margin = 50
+    bottom_limit = page_margin + 60  # Avoid printing too low
 
     for date, zs_time, write_time, text in editable_schedule:
         text = zs_time + ": " + text
         c.setFont("Helvetica", 10)
+
+        # Check for new page
+        if y_position < bottom_limit:
+            c.showPage()
+            page_number += 1
+            draw_header()
+            y_position = height - 200
+
         c.drawString(55, y_position, date)
         c.drawString(55, y_position - 10, write_time)
 
-        text_lines = text.split("\n")  # Handle multi-line text manually
-        for line in text_lines:
-            wrapped_lines = split_by_chars(replace_slovak_chars(line), char_limit)
-            for wrapped_line in wrapped_lines:
-                c.drawString(150, y_position, wrapped_line)
-                y_position -= 15 
+        # Wrap text correctly
+        wrapped_lines = simpleSplit(replace_slovak_chars(text), "Helvetica", 10, 400)
+        for line in wrapped_lines:
+            if y_position < bottom_limit:
+                c.showPage()
+                page_number += 1
+                draw_header()
+                y_position = height - 200
 
+            c.drawString(150, y_position, line)
+            y_position -= 15  # Move down for next line
+
+        # Ensure new page if needed for signature
+        if y_position < 80:
+            c.showPage()
+            page_number += 1
+            draw_header()
+            y_position = height - 200
 
         # Nurse's Signature
         c.setFont("Helvetica-Bold", 10)
         c.drawString(150, y_position, name_worker)
         c.setFont("Helvetica", 10)
         c.drawString(300, y_position, "Podpis:")
-        y_position -= 15
-
-        y_position -= 20
+        y_position -= 20  # Move down
 
         # Ensure new page if needed
         if y_position < 100:
@@ -149,11 +175,9 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
             y_position = height - 200
 
     c.save()
-
     print("PDF generated successfully!")
     update_patient_db(rodne_cislo, str(page_number+1))
     open_pdf(pdf_path)
-
     return pdf_path
 
 def open_pdf(pdf_path):
@@ -828,6 +852,21 @@ def initialize_db():
                 FOREIGN KEY (pacient_id) REFERENCES pacienti(id) ON DELETE CASCADE
             );
         """)
+
+shutdown_timer = None
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    global shutdown_timer
+    print("Client disconnected. Waiting 5 seconds before shutting down...")
+    
+    def shutdown_if_no_clients():
+        if not socketio.server.manager.get_participants("/", "/"):
+            print("No active clients. Shutting down server...")
+            os._exit(0)
+
+    shutdown_timer = threading.Timer(5, shutdown_if_no_clients)
+    shutdown_timer.start()
 
 if __name__ == "__main__":
     check_db()
