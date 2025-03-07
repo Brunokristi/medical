@@ -308,7 +308,7 @@ textarea {
     display: flex;
     box-sizing: border-box;
     border: none;
-    min-width: 100px;
+    min-width: max-content;
     scroll-behavior: smooth;
 }
 
@@ -430,4 +430,28 @@ textarea {
 .loader-active {
     visibility: visible;
     opacity: 1;
+}
+
+.months_scroll {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    width: 100%;
+}
+
+.month-token {
+    padding: 8px;
+    background: #fff;
+    border-radius: 20px;
+    cursor: pointer;
+    color: #5C9EAD;
+    display: flex;
+    box-sizing: border-box;
+    border: solid 1px #5C9EAD;
+    min-width: 100px;
+    scroll-behavior: smooth;
+    text-decoration: none;
+    justify-content: center;
+    align-items: center;
 }

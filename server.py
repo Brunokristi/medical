@@ -38,13 +38,8 @@ def replace_slovak_chars(text):
         text = text.decode('utf-8')
     return "".join(replacements.get(char, char) for char in text)
 
-
 def split_by_chars(text, char_limit):
     return [text[i:i + char_limit] for i in range(0, len(text), char_limit)]
-
-
-from reportlab.lib.utils import simpleSplit
-from reportlab.lib.pagesizes import A4
 
 def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, hl_text, podtext_1, podtext_2, koniec_mesiaca):
     if os.name == "nt":  # Windows
@@ -128,7 +123,7 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
     bottom_limit = page_margin + 60  # Avoid printing too low
 
     for date, zs_time, write_time, text in editable_schedule:
-        text = zs_time + ": " + text
+        text = replace_slovak_chars(zs_time + ": " + text)
         c.setFont("Helvetica", 10)
 
         # Check for new page
@@ -184,24 +179,144 @@ def open_pdf(pdf_path):
     if os.name == "nt":
         os.system(f'start "" "{pdf_path}"')
     else:
-        os.system(f"open '{pdf_path}'")
+        os.system(f"open '{pdf_path}'") 
 
 
-@app.route('/open-folder', methods=['GET'])
-def open_folder():
-    folder_path = os.path.expanduser("~/Documents/ados")  # Adjust for Windows if needed
 
+
+
+@app.route("/")
+def index():
+    conn = get_db_connection()
+    nurses = conn.execute("SELECT * FROM sestry").fetchall()
+    conn.close()
+    return render_template("login.html", nurses=nurses)
+
+
+
+@app.route("/add_nurse", methods=["POST"])
+def add_nurse():
+    name = request.form.get("meno").strip()
+
+    if not name:
+        flash("Nurse name cannot be empty!", "warning")
+        return redirect(url_for("login"))
+
+    conn = get_db_connection()
     try:
-        if platform.system() == "Darwin":  # macOS
-            subprocess.run(["open", folder_path])
-        elif platform.system() == "Windows":  # Windows
-            subprocess.run(["explorer", folder_path])
-        
-        return jsonify({"status": "success", "message": "Folder opened successfully"})
-    
+        conn.execute("INSERT INTO sestry (meno) VALUES (?)", (name,))
+        conn.commit()
+        flash(f"Nurse '{name}' added successfully!", "success")
+    except sqlite3.Error as e:
+        flash(f"Database error: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(url_for("index"))
+
+@app.route("/remove_nurse", methods=["GET"])
+def remove_nurse():
+    nurse_id = request.args.get("id")
+
+    if not nurse_id:
+        flash("Invalid request. No nurse ID provided!", "warning")
+        return redirect(url_for("login"))
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.execute("DELETE FROM sestry WHERE id = ?", (nurse_id,))
+        conn.commit()
+
+        if cursor.rowcount > 0:
+            flash(f"Nurse removed successfully!", "success")
+        else:
+            flash(f"No nurse found with the given ID.", "warning")
+
+    except sqlite3.Error as e:
+        flash(f"Database error: {e}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(url_for("index"))
+
+
+
+
+
+
+
+def generate_dates(cursor, month_id, year, month):
+    days_in_month = calendar.monthrange(year, month)[1]
+
+    for day in range(1, days_in_month + 1):
+        date_str = f"{year}-{month:02d}-{day:02d}"
+        cursor.execute("INSERT INTO dni (datum, mesiac) VALUES (?, ?)", (date_str, month_id))
+
+@app.route("/month", methods=["POST"])
+def month():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        data = request.get_json()
+
+        nurse_id = data.get("nurse")
+        month_input = data.get("month")
+        zs_start_time = data.get("zs_start_time")
+        zs_end_time = data.get("zs_end_time")
+        write_start_time = data.get("write_start_time")
+        write_end_time = data.get("write_end_time")
+
+        if not month_input or not nurse_id:
+            return jsonify({"error": "Mesiac a sestra sú povinné!"}), 400
+
+        year, month = map(int, month_input.split("-"))
+
+        # Check if the month already exists
+        cursor.execute("SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?", (month, year, nurse_id))
+        existing_month = cursor.fetchone()
+
+        if existing_month:
+            # Update the existing entry
+            cursor.execute("""
+                UPDATE mesiac 
+                SET vysetrenie_start = ?, vysetrenie_koniec = ?, vypis_start = ?, vypis_koniec = ? 
+                WHERE id = ?
+            """, (zs_start_time, zs_end_time, write_start_time, write_end_time, existing_month["id"]))
+            conn.commit()
+
+            flash("Mesiac bol aktualizovaný!", "info")
+        else:
+            # Insert a new month
+            cursor.execute("""
+                INSERT INTO mesiac (mesiac, rok, vysetrenie_start, vysetrenie_koniec, vypis_start, vypis_koniec, sestra_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (month, year, zs_start_time, zs_end_time, write_start_time, write_end_time, nurse_id))
+            conn.commit()
+
+            # Retrieve the new month ID
+            cursor.execute("SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?", (month, year, nurse_id))
+            month_id = cursor.fetchone()["id"]
+
+            generate_dates(cursor, month_id, year, month)
+            conn.commit()
+
+            flash("Mesiac a jeho dátumy boli úspešne vytvorené!", "success")
+
+        conn.close()
+
+        # Redirect to the detail page for that month
+        return jsonify({"redirect": url_for("detail", nurse_id=nurse_id, year=year, month=month)})
+
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-    
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+
+
 
 @app.route("/generate_schedule", methods=["POST"])
 def generate_schedule():
@@ -313,101 +428,6 @@ def generate_schedule():
 
 
 
-@app.route("/")
-def index():
-    conn = get_db_connection()
-    nurses = conn.execute("SELECT * FROM sestry").fetchall()
-    conn.close()
-    return render_template("login.html", nurses=nurses)
-
-@app.route("/add_nurse", methods=["POST"])
-def add_nurse():
-    name = request.form.get("meno").strip()
-
-    if not name:
-        flash("Nurse name cannot be empty!", "warning")
-        return redirect(url_for("login"))
-
-    conn = get_db_connection()
-    try:
-        conn.execute("INSERT INTO sestry (meno) VALUES (?)", (name,))
-        conn.commit()
-        flash(f"Nurse '{name}' added successfully!", "success")
-    except sqlite3.Error as e:
-        flash(f"Database error: {e}", "danger")
-    finally:
-        conn.close()
-
-    return redirect(url_for("index"))
-
-
-
-
-def generate_dates(cursor, month_id, year, month):
-    days_in_month = calendar.monthrange(year, month)[1]
-
-    # Insert each day into the dni table
-    for day in range(1, days_in_month + 1):
-        date_str = f"{year}-{month:02d}-{day:02d}"  # Format YYYY-MM-DD
-        cursor.execute("INSERT INTO dni (datum, mesiac) VALUES (?, ?)", (date_str, month_id))
-
-@app.route("/month", methods=["POST"])
-def month():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Get JSON data from fetch request
-        data = request.get_json()
-
-        nurse_id = data.get("nurse")
-        month_input = data.get("month")
-        zs_start_time = data.get("zs_start_time")
-        zs_end_time = data.get("zs_end_time")
-        write_start_time = data.get("write_start_time")
-        write_end_time = data.get("write_end_time")
-
-        if not month_input or not nurse_id:
-            return jsonify({"error": "Mesiac a sestra sú povinné!"}), 400
-
-        # Extract year and month from YYYY-MM format
-        year, month = map(int, month_input.split("-"))
-
-        # Check if the month already exists
-        cursor.execute("SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?", (month, year, nurse_id))
-        existing_month = cursor.fetchone()
-
-        if existing_month:
-            flash("Mesiac už existuje, načítavam dáta...", "info")
-            conn.close()
-            return jsonify({"redirect": url_for("detail", nurse_id=nurse_id, year=year, month=month)})
-
-        cursor.execute("""
-            INSERT INTO mesiac (mesiac, rok, vysetrenie_start, vysetrenie_koniec, vypis_start, vypis_koniec, sestra_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (month, year, zs_start_time, zs_end_time, write_start_time, write_end_time, nurse_id))
-        conn.commit()
-
-        cursor.execute("SELECT id FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ? ", (month, year, nurse_id))
-        month_id = cursor.fetchone()["id"]
-
-        generate_dates(cursor, month_id, year, month)
-        conn.commit()
-
-        flash("Mesiac a jeho dátumy boli úspešne vytvorené!", "success")
-
-        conn.close()
-
-        # Redirect to the detail page for that month
-        return jsonify({"redirect": url_for("detail", nurse_id=nurse_id, year=year, month=month)})
-
-    except Exception as e:
-        print("Error:", e)
-        return jsonify({"error": str(e)}), 500
-
-
-
-
 
 
 @app.route("/save_patient", methods=["POST"])
@@ -432,19 +452,17 @@ def save_patient():
 
         if existing_patient:
             patient_id = existing_patient["id"]
-            # Update existing patient
             cursor.execute("""
                 UPDATE pacienti
                 SET meno = ?, adresa = ?, poistovna = ?, sestra = ?, ados = ?
                 WHERE id = ?
             """, (meno, adresa, poistovna, sestra, ados, patient_id))
         else:
-            # Insert new patient
             cursor.execute("""
                 INSERT INTO pacienti (meno, rodne_cislo, adresa, poistovna, sestra, ados)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (meno, rodne_cislo, adresa, poistovna, sestra, ados))
-            patient_id = cursor.lastrowid  # Get the inserted patient ID
+            patient_id = cursor.lastrowid
 
         conn.commit()
         conn.close()
@@ -561,13 +579,13 @@ def insert_schedule():
         patient_id = data.get("patient_id")
         year = data.get("year")
         month = data.get("month")
-        schedule_dates = data.get("schedule")  # List of date strings in 'YYYY-MM-DD' format
+        schedule_dates = data.get("schedule")
         nurse = data.get("sestra")
 
         if not patient_id or not year or not month or not schedule_dates:
             return jsonify({"error": "Missing required data"}), 400
 
-        # Fetch the month ID from `mesiac` table
+        # Get the month ID
         cursor.execute("""
             SELECT id FROM mesiac 
             WHERE mesiac = ? AND rok = ? AND sestra_id = ?
@@ -579,7 +597,6 @@ def insert_schedule():
 
         mesiac_id = mesiac_id_row["id"]
 
-        # Fetch all valid days in the given month from `dni` table
         cursor.execute("""
             SELECT id, strftime('%Y-%m-%d', datum) AS datum FROM dni
             WHERE mesiac = ?
@@ -588,41 +605,29 @@ def insert_schedule():
         dni_records = {row["datum"]: row["id"] for row in cursor.fetchall()}
 
         cursor.execute("""
-            SELECT id FROM dni
-            WHERE mesiac = ?
-            ORDER BY datum ASC
-            LIMIT 1
-        """, (mesiac_id,))
+            DELETE FROM den_pacient 
+            WHERE pacient_id = ? AND den_id IN (
+                SELECT id FROM dni WHERE mesiac = ?
+            )
+        """, (patient_id, mesiac_id))
 
-        first_day_row = cursor.fetchone()
-        if first_day_row:
-            first_day = first_day_row["id"]  # Store the ID of the first day
-        else:
-            first_day = None  # If no days exist, set to None
-
-
-        # Insert each scheduled date if it exists in `dni`
+        inserted_days = []
         for schedule_date in schedule_dates:
             if schedule_date in dni_records:
-                den_id = dni_records[schedule_date]  # Get correct `den_id`
+                den_id = dni_records[schedule_date]
 
-                # Check if the entry already exists to avoid duplicates
                 cursor.execute("""
-                    SELECT id FROM den_pacient WHERE den_id = ? AND pacient_id = ?
+                    INSERT INTO den_pacient (den_id, pacient_id)
+                    VALUES (?, ?)
                 """, (den_id, patient_id))
-                existing_entry = cursor.fetchone()
-
-                if not existing_entry:
-                    cursor.execute("""
-                        INSERT INTO den_pacient (den_id, pacient_id)
-                        VALUES (?, ?)
-                    """, (den_id, patient_id))
+                
+                inserted_days.append(den_id) 
 
         conn.commit()
         conn.close()
 
-        # Redirect to the earliest scheduled day
-        if first_day:
+        if inserted_days:
+            first_day = min(inserted_days)
             return jsonify({
                 "redirect": url_for("detail", nurse_id=nurse, year=year, month=month, day=first_day)
             })
@@ -632,6 +637,7 @@ def insert_schedule():
     except Exception as e:
         print("Error:", e)
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/update_schedule", methods=["POST"])
 def update_schedule():
@@ -652,7 +658,6 @@ def update_schedule():
             arrival_time = entry.get("arrival_time")
             write_time = entry.get("write_time")
 
-            # ✅ Find `day_id` in `dni` table for the given `date`
             cursor.execute("""
                 SELECT id FROM dni 
                 WHERE datum = ? AND mesiac IN 
@@ -666,21 +671,18 @@ def update_schedule():
 
             day_id = day_row["id"]
 
-            # ✅ Check if entry already exists
             cursor.execute("""
                 SELECT id FROM den_pacient WHERE den_id = ? AND pacient_id = ?
             """, (day_id, patient_id))
             existing_entry = cursor.fetchone()
 
             if existing_entry:
-                # ✅ Update existing entry
                 cursor.execute("""
                     UPDATE den_pacient 
                     SET vysetrenie = ?, vypis = ? 
                     WHERE den_id = ? AND pacient_id = ?
                 """, (arrival_time, write_time, day_id, patient_id))
             else:
-                # ✅ Insert new entry
                 cursor.execute("""
                     INSERT INTO den_pacient (den_id, pacient_id, arrival_time, write_time)
                     VALUES (?, ?, ?, ?)
@@ -711,6 +713,13 @@ def detail(nurse_id, year, month, day):
         cursor.execute("SELECT * FROM sestry WHERE id = ?", (nurse_id,))
         nurse = cursor.fetchone()
 
+        cursor.execute("SELECT * FROM mesiac WHERE sestra_id = ? ORDER BY rok, mesiac", (nurse_id,))
+        vypisane_mesiace = cursor.fetchall()
+
+
+        print("nurse", nurse)
+        print("vypisane_mesiace", vypisane_mesiace)
+
         if not nurse:
             conn.close()
             flash("Nurse not found!", "danger")
@@ -735,16 +744,19 @@ def detail(nurse_id, year, month, day):
 
                 # Fetch all patients in the month with their IDs
                 cursor.execute("""
-                    SELECT DISTINCT pacienti.id AS patient_id, pacienti.* 
+                    SELECT DISTINCT pacienti.id AS patient_id, pacienti.*, 
+                        GROUP_CONCAT(strftime('%Y-%m-%d', dni.datum)) AS scheduled_dates
                     FROM pacienti
                     JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
                     JOIN dni ON den_pacient.den_id = dni.id
                     WHERE dni.mesiac = ?
+                    GROUP BY pacienti.id
                 """, (month_data["id"],))
+
                 patients_in_month = [dict(row) for row in cursor.fetchall()]
 
                 cursor.execute("""
-                    SELECT dni.datum AS day_date, pacienti.id AS patient_id, pacienti.meno AS patient_name, pacienti.adresa AS patient_adresa
+                    SELECT dni.datum AS day_date, pacienti.id AS patient_id, pacienti.meno AS patient_name, pacienti.adresa AS patient_adresa, pacienti.rodne_cislo
                     FROM pacienti
                     JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
                     JOIN dni ON den_pacient.den_id = dni.id
@@ -757,6 +769,7 @@ def detail(nurse_id, year, month, day):
                     day_date = row["day_date"]
                     patient_data = {
                         "patient_id": row["patient_id"],
+                        "patient_rc": row["rodne_cislo"],
                         "patient_name": row["patient_name"],
                         "patient_address": row["patient_adresa"]
                     }
@@ -769,6 +782,7 @@ def detail(nurse_id, year, month, day):
 
         return render_template("index.html",
                                nurse=nurse,
+                               vypisane_mesiace=vypisane_mesiace,
                                month=month_data,
                                days=days,
                                patients_in_month=patients_in_month,

@@ -127,7 +127,7 @@ function postPatientAndSchedule() {
 
             let dateObj = new Date(dateStart);
             let year = dateObj.getFullYear();
-            let month = (dateObj.getMonth() + 1).toString().padStart(2, "0");  // Ensure two-digit format
+            let month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
 
             let schedule = generate(dateStart, dateEnd, frequency);
 
@@ -150,7 +150,7 @@ function postPatientAndSchedule() {
         .then(response => response.json())
         .then(data => {
             if (data.redirect) {
-                window.location.href = data.redirect;  // Redirect to the detail page
+                window.location.href = data.redirect;
             } else {
                 alert("Chyba pri ukladaní harmonogramu.");
             }

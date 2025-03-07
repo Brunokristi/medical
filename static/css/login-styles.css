@@ -124,3 +124,13 @@ textarea {
     justify-content: center;
     align-items: center;
 }
+
+.delete-icon {
+    background-color: #fff;
+    color: #5C9EAD;
+    font-size: 16px;
+    border: solid 1px #5C9EAD;
+    padding: 8px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+}

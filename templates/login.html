@@ -13,7 +13,13 @@
         <h2>Prihlásenie</h1>
         <div class="personal">
             {% for nurse in nurses %}
-            <a href="{{ url_for('detail', nurse_id=nurse['id']) }}" class="small-token">{{ nurse['meno'] }}</a>
+            <div class="one-line">
+                <a href="{{ url_for('detail', nurse_id=nurse['id']) }}" class="small-token">
+                    {{ nurse['meno'] }}
+                </a>
+                <button class="delete-icon"
+                    onclick="event.stopPropagation(); confirmDelete('{{ nurse.id }}', '{{ nurse.meno }}')">Vymazať</button>
+            </div>
             {% endfor %}
         </div>
     </div>
@@ -29,5 +35,13 @@
         </form>
     </div>
 </body>
+
+<script>
+    function confirmDelete(nurseId, nurseName) {
+        if (confirm(`Naozaj si prajete vymazať pracovníka '${nurseName}'?`)) {
+            window.location.href = "{{ url_for('remove_nurse') }}?id=" + nurseId;
+        }
+    }
+</script>
 
 </html>

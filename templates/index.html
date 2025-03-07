@@ -33,6 +33,18 @@
     <div class="main">
         <div class="left container">
             <div class="section">
+                <h2 class="lined-heading"><span>Rozpracované mesiace <span></h2>
+                <div class="months_scroll">
+                    {% for vypisany in vypisane_mesiace %}
+                    <a class="month-token"
+                        href="{{ url_for('detail', nurse_id=nurse.id, month=vypisany.mesiac, year=vypisany.rok) }}">
+                        {{ vypisany.mesiac }}/{{ vypisany.rok }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="section">
                 <input type="hidden" id="nurse_id" value="{{ nurse['id'] }}">
             
                 <div class="form-group">
@@ -69,7 +81,7 @@
                 <button class="btn" onclick="postMonth()">Zvoliť mesiac</button>
             </div>
 
-            <div class="section inactive" id="patient-section">
+            <div class="section" id="patient-section">
                 <h2 class="lined-heading"><span>Pacient</span></h2>
                 <div class="form-group">
                     <label for="rodne_cislo">Rodné číslo</label>
@@ -135,7 +147,7 @@
                 </div>
             </div>
 
-            <div class="section inactive" id="route-section">
+            <div class="section" id="route-section">
                 <div class="one-line">
                         <button id="prevDay"><i class="bi bi-arrow-left-short"></i></button>
                         <h3 class="selected-date" id="selectedDate">{{ days[0]['datum'] if days else 'Žiadne dátumy' }}</h3>
@@ -170,7 +182,7 @@
         </div>
 
         <div class="right container">
-            <div class="section inactive" id="dekurz-section">
+            <div class="section" id="dekurz-section">
                 <div class="scroll">
                     {% for patient in patients_in_month %}
                     <button class="small-token" data-id="{{ patient.id }}">
@@ -203,7 +215,7 @@
                 
                 <div class="form-group">
                     <label for="date_picker_1">Dátumy vykonania základného ošetrenia</label>
-                    <input class="dates" type="text" id="date_picker_1" placeholder="Vyberte dátumy" readonly>
+                    <input class="dates" type="text" id="date_picker_1" placeholder="Vyberte dátumy">
                     <div id="selected_dates_1" class="tokens-container"></div>
                     <input type="hidden" id="dates_list_1" name="dates_list_1">
                 </div>
@@ -383,11 +395,11 @@
         setSelectValue("company", patient.company);
 
         // Populate additional fields
-        document.getElementById("hl-text").value = patient.hl_text;
-        document.getElementById("podtext-1").value = patient.podtext_1;
-        document.getElementById("podtext-2").value = patient.podtext_2;
-        document.getElementById("koniec-mesiaca").value = patient.koniec_mesiaca;
-        document.getElementById("entry_number").value = patient.entry_number;
+        // document.getElementById("hl-text").value = patient.hl_text;
+        // document.getElementById("podtext-1").value = patient.podtext_1;
+        // document.getElementById("podtext-2").value = patient.podtext_2;
+        // document.getElementById("koniec-mesiaca").value = patient.koniec_mesiaca;
+        // document.getElementById("entry_number").value = patient.entry_number;
     }
 
     function setSelectValue(selectId, value) {
@@ -404,8 +416,6 @@
         let today = new Date().toISOString().split("T")[0];
         if (month && year) {
             document.getElementById("month").value = `${year}-${String(month).padStart(2, '0')}`;
-            document.getElementById("patient-section").classList.remove("inactive");
-            document.getElementById("route-section").classList.remove("inactive");
         }
         if (start) {
             document.getElementById("zs_start_time").value = start;
@@ -555,9 +565,22 @@
                     let patientToken = document.createElement("div");
                     patientToken.classList.add("draggable", "token");
                     patientToken.setAttribute("draggable", "true");
+                    patientToken.setAttribute("data-rc", patient.patient_rc);
                     patientToken.setAttribute("data-id", patient.patient_id);
+                    patientToken.setAttribute("data-name", patient.patient_name);
                     patientToken.setAttribute("data-address", patient.patient_address);
+                    patientToken.setAttribute("data-insurance", patient.insurance);
+                    patientToken.setAttribute("data-company", patient.company);
                     patientToken.textContent = `${patient.patient_name}`;
+
+                    // Add click event to populate inputs
+                    patientToken.addEventListener("click", function () {
+                        document.getElementById("rodne_cislo").value = this.getAttribute("data-rc");
+                        document.getElementById("meno").value = this.getAttribute("data-name");
+                        document.getElementById("adresa").value = this.getAttribute("data-address");
+                        setSelectValue("poistovna", this.getAttribute("data-insurance"));
+                        setSelectValue("company",   this.getAttribute("data-company"));
+                    });
 
                     patientList.appendChild(patientToken);
                 });
@@ -844,7 +867,7 @@
 
     async function schedulePatientsMonth() {
         const loader = document.getElementById("loader");
-        loader.classList.add("loader-active"); // ✅ Show loader before starting
+        loader.classList.add("loader-active");
 
         let customRouteCheckbox = document.getElementById("custom-route");
         let startAddress = document.getElementById("start").value;
@@ -853,7 +876,7 @@
 
         if (!startCoords) {
             console.warn("Invalid start location.");
-            loader.classList.remove("loader-active"); // ✅ Hide loader on error
+            loader.classList.remove("loader-active");
             return;
         }
 
@@ -905,14 +928,14 @@
                     } else {
                         console.error(`Error fetching route for ${selectedDate}:`, status);
                     }
-                    resolve(); // ✅ Ensure we wait for all API calls
+                    resolve();
                 });
             });
         }
 
         setTimeout(() => {
             sendScheduleToBackend(generatedSchedule, sestra_id);
-            loader.classList.remove("loader-active"); // ✅ Hide loader after request is complete
+            loader.classList.remove("loader-active");
         }, 3000);
     }
 
@@ -992,13 +1015,11 @@
         const patientButtons = document.querySelectorAll(".small-token");
         const patientInfoDiv = document.querySelector(".patient-info");
 
-        // Convert patients_in_month into an object for easy lookup
         let patientData = {};
         patients_in_month.forEach(patient => {
             patientData[patient.id] = patient;
         });
 
-        // Add event listener to each button
         patientButtons.forEach(button => {
             button.addEventListener("click", function () {
                 let patientId = this.getAttribute("data-id");
@@ -1030,6 +1051,13 @@
                     document.getElementById("date_picker_3").value = "";
                     document.getElementById("date_picker_4").value = "";
                     document.getElementById("date_picker_5").value = "";
+                    document.getElementById("date_picker_1")._flatpickr.clear();
+                    document.getElementById("date_picker_2")._flatpickr.clear();
+                    document.getElementById("date_picker_3")._flatpickr.clear();
+                    document.getElementById("date_picker_4")._flatpickr.clear();
+                    document.getElementById("date_picker_5")._flatpickr.clear();
+
+                    
 
 
                 } else {
@@ -1094,19 +1122,6 @@
             console.error("Error generating schedule:", error);
         }
     }
-
-    var socket = io.connect("http://localhost:5000");
-
-    document.addEventListener("visibilitychange", function () {
-        if (document.hidden) {
-            console.log("Tab is hidden, but not closed.");
-        }
-    });
-
-    window.addEventListener("unload", function () {
-        console.log("Window is being closed.");
-        socket.disconnect();  // Triggers server shutdown only on real close
-    });
 
 
 
