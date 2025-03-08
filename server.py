@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 import calendar
 from reportlab.lib.utils import simpleSplit
 from flask_socketio import SocketIO
+import json
 
 
 
@@ -350,10 +351,6 @@ def generate_schedule():
         start = datetime.strptime(data.get("start"), "%Y-%m-%d").date()
         end = datetime.strptime(data.get("end"), "%Y-%m-%d").date()
         end = end + timedelta(days=1)
-
-
-        print("start", start)
-        print("end", end)
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -699,6 +696,16 @@ def update_schedule():
 
 
 
+def remove_newlines(data):
+    """Recursively remove newlines from all string values in a dictionary or list."""
+    if isinstance(data, str):
+        return data.replace("\n", " ").replace("\r", " ")
+    elif isinstance(data, list):
+        return [remove_newlines(item) for item in data]
+    elif isinstance(data, dict):
+        return {key: remove_newlines(value) for key, value in data.items()}
+    return data
+
 
 @app.route("/detail/<int:nurse_id>/", defaults={"year": None, "month": None, "day": None}, methods=["GET", "POST"])
 @app.route("/detail/<int:nurse_id>/<int:year>/", defaults={"month": None, "day": None}, methods=["GET", "POST"])
@@ -717,9 +724,6 @@ def detail(nurse_id, year, month, day):
         vypisane_mesiace = cursor.fetchall()
 
 
-        print("nurse", nurse)
-        print("vypisane_mesiace", vypisane_mesiace)
-
         if not nurse:
             conn.close()
             flash("Nurse not found!", "danger")
@@ -736,13 +740,12 @@ def detail(nurse_id, year, month, day):
                 SELECT * FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?
             """, (month, year, nurse_id))
             month_data = cursor.fetchone()
+            print("month", month_data["id"], month_data["mesiac"], month_data["rok"], month_data["vysetrenie_start"], month_data["vysetrenie_koniec"], month_data["vypis_start"], month_data["vypis_koniec"], month_data["sestra_id"])
 
             if month_data:
-                # Fetch all days in the month
                 cursor.execute("SELECT id, datum FROM dni WHERE mesiac = ?", (month_data["id"],))
                 days = [dict(row) for row in cursor.fetchall()]
 
-                # Fetch all patients in the month with their IDs
                 cursor.execute("""
                     SELECT DISTINCT pacienti.id AS patient_id, pacienti.*, 
                         GROUP_CONCAT(strftime('%Y-%m-%d', dni.datum)) AS scheduled_dates
@@ -754,6 +757,9 @@ def detail(nurse_id, year, month, day):
                 """, (month_data["id"],))
 
                 patients_in_month = [dict(row) for row in cursor.fetchall()]
+                print("Patients in Month (Converted to Dicts):", patients_in_month)
+
+                
 
                 cursor.execute("""
                     SELECT dni.datum AS day_date, pacienti.id AS patient_id, pacienti.meno AS patient_name, pacienti.adresa AS patient_adresa, pacienti.rodne_cislo
@@ -779,15 +785,14 @@ def detail(nurse_id, year, month, day):
 
         conn.close()
 
-
         return render_template("index.html",
-                               nurse=nurse,
-                               vypisane_mesiace=vypisane_mesiace,
-                               month=month_data,
-                               days=days,
-                               patients_in_month=patients_in_month,
-                               patients_by_day=patients_by_day
-                            )
+            nurse=nurse,
+            vypisane_mesiace=vypisane_mesiace,
+            month=month_data,
+            days=days,
+            patients_in_month=remove_newlines(patients_in_month),  
+            patients_by_day=remove_newlines(patients_by_day)
+        )
 
     except Exception as e:
         flash(f"Chyba: {e}", "danger")

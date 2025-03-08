@@ -203,72 +203,19 @@
                 <h2 class="lined-heading"><span>Nález</span></h2>
                 
                 
-                <div class="form-group">
-                    <label for="hl-text">Nález</label>
-                    <textarea id="hl-text" name="hl-text" rows="5" required></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="podtext-1" style="margin-top: 30px;">Základné ošetrenie</label>
-                    <textarea id="podtext-1" name="podtext-1" rows="5"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="date_picker_1">Dátumy vykonania základného ošetrenia</label>
-                    <input class="dates" type="text" id="date_picker_1" placeholder="Vyberte dátumy">
-                    <div id="selected_dates_1" class="tokens-container"></div>
-                    <input type="hidden" id="dates_list_1" name="dates_list_1">
-                </div>
-                
-                <div class="form-group">
-                    <label for="podtext-2" style="margin-top: 30px;">Doplnkové ošetrenie</label>
-                    <textarea id="podtext-2" name="podtext-2" rows="5"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="date_picker_2">Dátumy vykonania doplnkového ošetrenia</label>
-                    <input class="dates" type="text" id="date_picker_2" placeholder="Vyberte dátumy" readonly>
-                    <div id="selected_dates_2" class="tokens-container"></div>
-                    <input type="hidden" id="dates_list_2" name="dates_list_2">
-                </div>
-                
-                <!-- ✅ NEW Text Field 1 with Multiple Date Selection -->
-                <div class="form-group">
-                    <label for="podtext-3" style="margin-top: 30px;">Poznámka</label>
-                    <textarea id="podtext-3" name="podtext-3" rows="2"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="date_picker_3">Dátumy</label>
-                    <input class="dates" type="text" id="date_picker_3" placeholder="Vyberte dátumy" readonly>
-                    <div id="selected_dates_3" class="tokens-container"></div>
-                    <input type="hidden" id="dates_list_3" name="dates_list_3">
-                </div>
-                
-                <!-- ✅ NEW Text Field 2 with Multiple Date Selection -->
-                <div class="form-group">
-                    <label for="podtext-4" style="margin-top: 30px;">Poznámka</label>
-                    <textarea id="podtext-4" name="podtext-4" rows="2"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="date_picker_4">Dátumy</label>
-                    <input class="dates" type="text" id="date_picker_4" placeholder="Vyberte dátumy" readonly>
-                    <div id="selected_dates_4" class="tokens-container"></div>
-                    <input type="hidden" id="dates_list_4" name="dates_list_4">
-                </div>
-                
-                <div class="form-group">
-                    <label for="koniec-mesiaca" style="margin-top: 30px;">Zhodnotenie na koniec mesiaca</label>
-                    <textarea id="koniec-mesiaca" name="koniec-mesiaca" rows="5"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="date_picker_5">Dátum zhodnotenia na koniec mesiaca</label>
-                    <input class="dates" type="text" id="date_picker_5" placeholder="Vyberte dátum" readonly>
-                    <div id="selected_dates_5" class="tokens-container"></div>
-                    <input type="hidden" id="dates_list_5" name="dates_list_5">
-                </div>
+                {% for i in range(1, 9) %}
+                    <div class="form-group">
+                        <label for="podtext-{{ i }}" style="margin-top: 30px;">Text Dekurzu {{ i }}</label>
+                        <textarea id="podtext-{{ i }}" name="podtext-{{ i }}" rows="5"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="date_picker_{{ i }}">Dátumy</label>
+                        <input class="dates" type="text" id="date_picker_{{ i }}" placeholder="Vyberte dátumy" readonly>
+                        <div id="selected_dates_{{ i }}" class="tokens-container"></div>
+                        <input type="hidden" id="dates_list_{{ i }}" name="dates_list_{{ i }}">
+                    </div>
+                {% endfor %}
 
                 <div class="form-group">
                     <label for="entry_number" style="margin-top: 30px;">Číslo dekurzu</label>
@@ -291,15 +238,16 @@
     let patientMarkers = [];
     let selectedDates = [];
     let month = "{{ month.mesiac }}" || null;
+    console.log("month", month)
     let start = "{{ month.vysetrenie_start }}" || null;
+    console.log("zaciatok vysetrenia", start)
     let end = "{{ month.vysetrenie_koniec }}" || null;
     let write_start = "{{ month.vypis_start }}" || null;
     let write_end = "{{ month.vypis_koniec }}" || null;
     let year = "{{ month.rok }}" || null;
     let days = JSON.parse('{{ days | tojson | safe }}');
-    let patients_by_day = JSON.parse('{{ patients_by_day | tojson | safe }}');
-    let patients_in_month = JSON.parse('{{ patients_in_month | tojson | safe }}');
-
+    let patients_by_day = '{{ patients_by_day | tojson | safe }}';
+    let patients_in_month = '{{ patients_in_month | tojson | safe }}';
 
     window.onload = function () {
         setTodayDate();
@@ -308,7 +256,6 @@
 
     
 
-    // sipka hore-dolu
     document.addEventListener("DOMContentLoaded", function () {
         const toggleButton = document.querySelector(".text-button");
         const hiddenSection = document.querySelector(".hidden");
@@ -393,13 +340,6 @@
         document.getElementById("adresa").value = patient.address;
         setSelectValue("poistovna", patient.insurance);
         setSelectValue("company", patient.company);
-
-        // Populate additional fields
-        // document.getElementById("hl-text").value = patient.hl_text;
-        // document.getElementById("podtext-1").value = patient.podtext_1;
-        // document.getElementById("podtext-2").value = patient.podtext_2;
-        // document.getElementById("koniec-mesiaca").value = patient.koniec_mesiaca;
-        // document.getElementById("entry_number").value = patient.entry_number;
     }
 
     function setSelectValue(selectId, value) {
@@ -857,12 +797,15 @@
             });
         }
 
-        // Apply Flatpickr to each date picker
+        applyFlatpickr("#date_picker_0", true);
         applyFlatpickr("#date_picker_1", true);
         applyFlatpickr("#date_picker_2", true);
         applyFlatpickr("#date_picker_3", true);
         applyFlatpickr("#date_picker_4", true);
         applyFlatpickr("#date_picker_5", false);
+        applyFlatpickr("#date_picker_6", false);
+        applyFlatpickr("#date_picker_7", false);
+        applyFlatpickr("#date_picker_8", false);
     });
 
     async function schedulePatientsMonth() {
@@ -1056,10 +999,6 @@
                     document.getElementById("date_picker_3")._flatpickr.clear();
                     document.getElementById("date_picker_4")._flatpickr.clear();
                     document.getElementById("date_picker_5")._flatpickr.clear();
-
-                    
-
-
                 } else {
                     console.warn("Patient not found in preloaded data.");
                 }
