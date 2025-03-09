@@ -562,9 +562,110 @@ def update_patient():
         print("Error:", e)
         return jsonify({"error": str(e)}), 500
 
+@app.route("/delete_patient", methods=["POST"])
+def delete_patient():
+    try:
+        data = request.get_json()
 
+        if data is None:
+            return jsonify({"error": "Invalid JSON received"}), 400
 
+        patient_id = data.get("id", "")
+        if not patient_id:
+            return jsonify({"error": "Missing patient ID"}), 400
 
+        # Database deletion
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM pacienti WHERE id = ?", (patient_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/delete_patient_day", methods=["POST"])
+def delete_patient_day():
+    try:
+        data = request.get_json()
+
+        if data is None:
+            return jsonify({"error": "Invalid JSON received"}), 400
+
+        patient_id = data.get("patient_id", "")
+        date = data.get("date", "")
+
+        if not patient_id or not date:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id FROM dni WHERE datum = ?", (date,))
+        result = cursor.fetchone()
+
+        if not result:
+            return jsonify({"error": "No matching date found in `dni` table"}), 404
+
+        day_id = result[0]
+
+        cursor.execute(
+            "DELETE FROM `den_pacient` WHERE pacient_id = ? AND den_id = ?",
+            (patient_id, day_id),
+        )
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/delete_patient_month", methods=["POST"])
+def delete_patient_month():
+    try:
+        data = request.get_json()
+
+        if data is None:
+            return jsonify({"error": "Invalid JSON received"}), 400
+
+        patient_id = data.get("patient_id", "")
+        date = data.get("date", "")
+
+        if not patient_id or not date:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Step 1: Extract year and month from the date
+        year, month, _ = date.split("-")  # YYYY-MM-DD -> Extract YYYY and MM
+
+        # Step 2: Find all `den_id` values for this month in the `dni` table
+        cursor.execute("SELECT id FROM dni WHERE strftime('%Y-%m', datum) = ?", (f"{year}-{month}",))
+        results = cursor.fetchall()
+
+        if not results:
+            return jsonify({"error": "No matching days found in `dni` table"}), 404
+
+        day_ids = [row[0] for row in results]  # Extract day IDs
+
+        # Step 3: Delete patient records for the whole month
+        cursor.execute(
+            f"DELETE FROM `den_pacient` WHERE pacient_id = ? AND den_id IN ({','.join(['?'] * len(day_ids))})",
+            [patient_id] + day_ids,
+        )
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/insert_schedule", methods=["POST"])
 def insert_schedule():
@@ -635,7 +736,6 @@ def insert_schedule():
         print("Error:", e)
         return jsonify({"error": str(e)}), 500
 
-
 @app.route("/update_schedule", methods=["POST"])
 def update_schedule():
     try:
@@ -697,7 +797,6 @@ def update_schedule():
 
 
 def remove_newlines(data):
-    """Recursively remove newlines from all string values in a dictionary or list."""
     if isinstance(data, str):
         return data.replace("\n", " ").replace("\r", " ")
     elif isinstance(data, list):
@@ -791,7 +890,7 @@ def detail(nurse_id, year, month, day):
             month=month_data,
             days=days,
             patients_in_month=remove_newlines(patients_in_month),  
-            patients_by_day=remove_newlines(patients_by_day)
+            patients_by_day=patients_by_day
         )
 
     except Exception as e:
@@ -810,10 +909,14 @@ def get_db_connection():
     return conn
 
 def check_db():
+    """Checks if the database file exists; if not, initializes it."""
     if not os.path.exists(DATABASE_FILE):
         initialize_db()
+    else:
+        update_existing_db()
 
 def initialize_db():
+    """Creates the database from scratch."""
     with sqlite3.connect(DATABASE_FILE) as conn:
         cursor = conn.cursor()
         cursor.executescript("""
@@ -857,6 +960,16 @@ def initialize_db():
                 koniec_mesiaca TEXT,
                 cislo_dekurzu INTEGER,
                 vypisane BOOLEAN DEFAULT 0,
+                -- New structured columns for text entries
+                dekurz_text_0 TEXT,
+                dekurz_text_1 TEXT,
+                dekurz_text_2 TEXT,
+                dekurz_text_3 TEXT,
+                dekurz_text_4 TEXT,
+                dekurz_text_5 TEXT,
+                dekurz_text_6 TEXT,
+                dekurz_text_7 TEXT,
+                dekurz_text_8 TEXT,
                 FOREIGN KEY (sestra) REFERENCES sestry(id) ON DELETE SET NULL
             );
 
@@ -872,22 +985,39 @@ def initialize_db():
             );
         """)
 
-shutdown_timer = None
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    global shutdown_timer
-    print("Client disconnected. Waiting 5 seconds before shutting down...")
-    
-    def shutdown_if_no_clients():
-        if not socketio.server.manager.get_participants("/", "/"):
-            print("No active clients. Shutting down server...")
-            os._exit(0)
+def update_existing_db():
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
 
-    shutdown_timer = threading.Timer(5, shutdown_if_no_clients)
-    shutdown_timer.start()
+        # Fetch existing column names
+        cursor.execute(f"PRAGMA table_info(pacienti)")
+        existing_columns = [row[1] for row in cursor.fetchall()]
+
+        # Add new dekurz text fields if they don't exist
+        for i in range(9):
+            column_name = f"dekurz_text_{i}"
+            if column_name not in existing_columns:
+                cursor.execute(f"ALTER TABLE pacienti ADD COLUMN {column_name} TEXT;")
+
+        conn.commit()
+
+        cursor.execute("""
+            UPDATE pacienti 
+            SET 
+                dekurz_text_0 = nalez,
+                dekurz_text_1 = osetrenie,
+                dekurz_text_2 = vedlajsie_osetrenie,
+                dekurz_text_3 = poznamka1,
+                dekurz_text_4 = poznamka2,
+                dekurz_text_5 = koniec_mesiaca
+        """)
+
+        conn.commit()
+
+        print("Database updated successfully with new fields and migrated data.")
 
 if __name__ == "__main__":
     check_db()
     threading.Timer(1.5, open_browser).start()
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=5000, debug=True)

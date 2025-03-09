@@ -26,6 +26,18 @@
         </div>
     </div>
 
+    <div id="overlay" class="overlay"></div>
+
+    <div id="delete-popup" class="popup">
+        <div class="popup-content">
+            <p>Naozaj vymazať pacienta?</p>
+            <button onclick="deletePatientDay()">Vymazať pacienta v tento deň</button>
+            <button onclick="deletePatientMonth()">Vymazať pacienta tento mesiac</button>
+            <button onclick="deletePatientDatabase()">Vymazať pacienta z databázy</button>
+            <button onclick="closeDeletePopup()">Zrušiť</button>
+        </div>
+    </div>
+
     <div id="loader" class="loader-overlay">
         <div class="spinner"></div>
     </div>
@@ -33,7 +45,7 @@
     <div class="main">
         <div class="left container">
             <div class="section">
-                <h2 class="lined-heading"><span>Rozpracované mesiace <span></h2>
+                <h2 class="lined-heading"><span>Rozpracované mesiace<span></h2>
                 <div class="months_scroll">
                     {% for vypisany in vypisane_mesiace %}
                     <a class="month-token"
@@ -45,6 +57,8 @@
             </div>
 
             <div class="section">
+                <h2 class="lined-heading"><span>Začať nový mesiac<span></h2>
+
                 <input type="hidden" id="nurse_id" value="{{ nurse['id'] }}">
             
                 <div class="form-group">
@@ -117,7 +131,7 @@
                     </select>
                 </div>
                 
-                <h2 class="lined-heading"><span>Dátumy a časy</span></h2>
+                <h2 class="lined-heading" style="margin-top: 20px;"><span>Dátumy a časy</span></h2>
                 
                 
                 <div class="half-form-group">
@@ -148,6 +162,8 @@
             </div>
 
             <div class="section" id="route-section">
+                <h2 class="lined-heading"><span>Plánovanie cesty<span></h2>
+
                 <div class="one-line">
                         <button id="prevDay"><i class="bi bi-arrow-left-short"></i></button>
                         <h3 class="selected-date" id="selectedDate">{{ days[0]['datum'] if days else 'Žiadne dátumy' }}</h3>
@@ -204,17 +220,22 @@
                 
                 
                 {% for i in range(1, 9) %}
-                    <div class="form-group">
-                        <label for="podtext-{{ i }}" style="margin-top: 30px;">Text Dekurzu {{ i }}</label>
-                        <textarea id="podtext-{{ i }}" name="podtext-{{ i }}" rows="5"></textarea>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="date_picker_{{ i }}">Dátumy</label>
-                        <input class="dates" type="text" id="date_picker_{{ i }}" placeholder="Vyberte dátumy" readonly>
-                        <div id="selected_dates_{{ i }}" class="tokens-container"></div>
+                <div class="form-group">
+                    <label for="podtext-{{ i }}" style="margin-top: 30px;">Text Dekurzu {{ i }}</label>
+                    <textarea id="podtext-{{ i }}" name="podtext-{{ i }}" rows="5"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="date_picker_{{ i }}">Dátumy</label>
+                    <div class="one-line">
+                        <input class="dates" type="text" id="date_picker_{{ i }}" placeholder="Vyberte dátumy" autocomplete="off">
+                
                         <input type="hidden" id="dates_list_{{ i }}" name="dates_list_{{ i }}">
+                    
+                        <textarea id="copy_paste_dates_{{ i }}" class="copy-paste-dates" rows="1"
+                            placeholder="Copy/paste dates here"></textarea>
                     </div>
+                </div>
                 {% endfor %}
 
                 <div class="form-group">
@@ -238,15 +259,13 @@
     let patientMarkers = [];
     let selectedDates = [];
     let month = "{{ month.mesiac }}" || null;
-    console.log("month", month)
     let start = "{{ month.vysetrenie_start }}" || null;
-    console.log("zaciatok vysetrenia", start)
     let end = "{{ month.vysetrenie_koniec }}" || null;
     let write_start = "{{ month.vypis_start }}" || null;
     let write_end = "{{ month.vypis_koniec }}" || null;
     let year = "{{ month.rok }}" || null;
     let days = JSON.parse('{{ days | tojson | safe }}');
-    let patients_by_day = '{{ patients_by_day | tojson | safe }}';
+    let patients_by_day = JSON.parse('{{ patients_by_day | tojson | safe }}');
     let patients_in_month = '{{ patients_in_month | tojson | safe }}';
 
     window.onload = function () {
@@ -519,16 +538,99 @@
                         document.getElementById("meno").value = this.getAttribute("data-name");
                         document.getElementById("adresa").value = this.getAttribute("data-address");
                         setSelectValue("poistovna", this.getAttribute("data-insurance"));
-                        setSelectValue("company",   this.getAttribute("data-company"));
+                        setSelectValue("company", this.getAttribute("data-company"));
                     });
 
+                    // Create delete icon
+                    let deleteIcon = document.createElement("span");
+                    deleteIcon.innerHTML = "X";
+                    deleteIcon.classList.add("delete-icon");
+
+                    // Delete event listener
+                    deleteIcon.addEventListener("click", function (event) {
+                        event.stopPropagation();
+                        showDeletePopup(patientToken, patient.patient_id, selectedDate);
+                    });
+
+                    // Append delete icon to the patient token
+                    patientToken.appendChild(deleteIcon);
                     patientList.appendChild(patientToken);
                 });
             }
         }
 
-        updateDate();
+        function showDeletePopup(element, patientId, selectedDate) {
+            let popup = document.getElementById("delete-popup");
+            let overlay = document.getElementById("overlay");
+
+            popup.style.display = "block";
+            overlay.style.display = "block";
+
+            window.selectedPatient = { element, patientId, selectedDate };
+        }
     });
+
+    function deletePatientDatabase() {
+        let { element, patientId } = window.selectedPatient;
+
+        fetch('/delete_patient', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: patientId })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert("Error: " + data.error);
+                }
+            })
+            .catch(error => console.error("Error:", error));
+    }
+
+    function deletePatientDay() {
+        let { patientId, selectedDate } = window.selectedPatient;
+
+        fetch('/delete_patient_day', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ patient_id: patientId, date: selectedDate })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert("Error: " + data.error);
+                }
+            })
+            .catch(error => console.error("Fetch error:", error));
+    }
+
+    function deletePatientMonth() {
+            let { patientId, selectedDate } = window.selectedPatient;
+
+            fetch('/delete_patient_month', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ patient_id: patientId, date: selectedDate })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload();
+                    } else {
+                        alert("Error: " + data.error);
+                    }
+                })
+                .catch(error => console.error("Fetch error:", error));
+        }
+
+    function closeDeletePopup() {
+        document.getElementById("delete-popup").style.display = "none";
+        document.getElementById("overlay").style.display = "none";
+    }
 
     // obmedzenie kalendaru iba na zvoleny mesiac
     function updateCalendar() {
@@ -625,6 +727,7 @@
     async function updateRoute() {
         let customRouteCheckbox = document.getElementById("custom-route");
 
+        // Clear existing markers
         patientMarkers.forEach(marker => marker.setMap(null));
         patientMarkers = [];
 
@@ -639,6 +742,7 @@
             return;
         }
 
+        // Collect waypoints
         for (let item of listItems) {
             let address = item.dataset.address;
             let coords = await geocodeAddress(address);
@@ -652,21 +756,100 @@
             return;
         }
 
-        let request = {
-            origin: startAddress,
-            destination: startAddress,
-            waypoints: waypoints,
-            optimizeWaypoints: customRouteCheckbox.checked,
-            travelMode: google.maps.TravelMode.DRIVING
-        };
+        let routeChunks = splitWaypoints(waypoints, 20);
+        let allLegs = [];
 
-        directionsService.route(request, function (result, status) {
-            if (status === google.maps.DirectionsStatus.OK) {
-                directionsRenderer.setDirections(result);
-                displayRouteInfo(result);
-            } else {
-                console.error("Error fetching route:", status);
+        let previousEnd = startAddress;
+        for (let i = 0; i < routeChunks.length; i++) {
+            let segmentWaypoints = routeChunks[i];
+
+            let isLastSegment = (i === routeChunks.length - 1);
+            let segmentDestination = isLastSegment ? startAddress : segmentWaypoints.pop().location;
+
+            let request = {
+                origin: previousEnd,
+                destination: segmentDestination,
+                waypoints: segmentWaypoints,
+                optimizeWaypoints: customRouteCheckbox.checked,
+                travelMode: google.maps.TravelMode.DRIVING
+            };
+
+            let result = await calculateRoute(request);
+            if (result) {
+                allLegs.push(...result.routes[0].legs); // Merge legs into one list
             }
+
+            previousEnd = segmentDestination; // Set next segment start
+        }
+
+        // Display the full route information in one table
+        displayRouteInfo(allLegs);
+    }
+
+    function splitWaypoints(waypoints, chunkSize) {
+        let chunks = [];
+        for (let i = 0; i < waypoints.length; i += chunkSize) {
+            chunks.push(waypoints.slice(i, i + chunkSize));
+        }
+        return chunks;
+    }
+
+    // Function to calculate and return each route segment
+    async function calculateRoute(request) {
+        return new Promise((resolve) => {
+            directionsService.route(request, function (result, status) {
+                if (status === google.maps.DirectionsStatus.OK) {
+                    directionsRenderer.setDirections(result); // Show last segment on map
+                    resolve(result);
+                } else {
+                    console.error("Error fetching route:", status);
+                    resolve(null);
+                }
+            });
+        });
+    }
+
+    // Updated displayRouteInfo to handle multiple segments
+    function displayRouteInfo(legs) {
+        let table = document.getElementById("route-info");
+        table.innerHTML = "";
+
+        let startTimeInput = document.getElementById("zs_start_time").value;
+        let writeStartTimeInput = document.getElementById("write_start_time").value;
+
+        let startTime = new Date(`1970-01-01T${startTimeInput}:00`);
+        let writeStartTime = new Date(`1970-01-01T${writeStartTimeInput}:00`);
+
+        const waitTime = 20;
+        const writeTimeIncrease = 5;
+
+        let totalTime = 0;
+        let totalDistance = 0;
+
+        legs.forEach((leg, index) => {
+            let duration = leg.duration ? Math.round(leg.duration.value / 60) : 0;
+            let end = leg.end_address;
+
+            let arrivalTime = new Date(startTime);
+            arrivalTime.setMinutes(arrivalTime.getMinutes() + duration + waitTime);
+
+            let patientWriteTime = new Date(writeStartTime);
+            patientWriteTime.setMinutes(patientWriteTime.getMinutes() + writeTimeIncrease);
+
+            let formattedArrivalTime = `${arrivalTime.getHours().toString().padStart(2, "0")}:${arrivalTime.getMinutes().toString().padStart(2, "0")}`;
+            let formattedWriteTime = `${patientWriteTime.getHours().toString().padStart(2, "0")}:${patientWriteTime.getMinutes().toString().padStart(2, "0")}`;
+
+            startTime.setMinutes(startTime.getMinutes() + duration + waitTime);
+            writeStartTime.setMinutes(writeStartTime.getMinutes() + writeTimeIncrease);
+
+            let row = `
+    <tr>
+        <td>${index + 1}.</td>
+        <td>${end}</td>
+        <td>${formattedArrivalTime}</td>
+        <td>${formattedWriteTime}</td>
+    </tr>`;
+            table.innerHTML += row;
         });
     }
 
@@ -685,51 +868,6 @@
         });
     }
 
-    function displayRouteInfo(result) {
-        let table = document.getElementById("route-info");
-        table.innerHTML = "";
-
-        let startTimeInput = document.getElementById("zs_start_time").value;
-        let writeStartTimeInput = document.getElementById("write_start_time").value;
-
-        let startTime = new Date(`1970-01-01T${startTimeInput}:00`);
-        let writeStartTime = new Date(`1970-01-01T${writeStartTimeInput}:00`);
-
-        const waitTime = 20;
-        const writeTimeIncrease = 5;
-
-        let legs = result.routes[0].legs;
-        let totalTime = 0;
-        let totalDistance = 0;
-
-        for (let i = 0; i < legs.length; i++) {
-            let leg = legs[i];
-            let duration = leg.duration ? Math.round(leg.duration.value / 60) : 0;
-            let end = leg.end_address;
-
-            let arrivalTime = new Date(startTime);
-            arrivalTime.setMinutes(arrivalTime.getMinutes() + duration + waitTime);
-
-            let patientWriteTime = new Date(writeStartTime);
-            patientWriteTime.setMinutes(patientWriteTime.getMinutes() + writeTimeIncrease);
-
-            let formattedArrivalTime = `${arrivalTime.getHours().toString().padStart(2, "0")}:${arrivalTime.getMinutes().toString().padStart(2, "0")}`;
-            let formattedWriteTime = `${patientWriteTime.getHours().toString().padStart(2, "0")}:${patientWriteTime.getMinutes().toString().padStart(2, "0")}`;
-
-            startTime.setMinutes(startTime.getMinutes() + duration + waitTime);
-            writeStartTime.setMinutes(writeStartTime.getMinutes() + writeTimeIncrease);
-
-            let row = `
-    <tr>
-        <td>${i + 1}.</td>
-        <td>${end}</td>
-        <td>${formattedArrivalTime}</td>
-        <td>${formattedWriteTime}</td>
-    </tr>`;
-            table.innerHTML += row;
-        }
-    }
-
     // vytvorit mapu pri nacitani stranky
     document.addEventListener("DOMContentLoaded", function () {
         initMap();
@@ -745,68 +883,106 @@
         });
     });
 
-    //vyber datumu s obmedzeniami napravo
-    document.addEventListener("DOMContentLoaded", function () {
+    function getDisallowedDaysForPatient(id_patient, patientsByDay, firstDay, lastDay) {
+        let allDays = new Set();
+        let allowedDays = new Set();
+
+        // Generate all days in the month in YYYY-MM-DD format
+        let currentDate = new Date(firstDay);
+        while (currentDate <= lastDay) {
+            let formattedDate = currentDate.toISOString().split("T")[0]; // Convert to "YYYY-MM-DD"
+            allDays.add(formattedDate);
+            currentDate.setDate(currentDate.getDate() + 1); // Move to next day
+        }
+
+        // Find allowed days for the patient
+        if (typeof patientsByDay === "object" && patientsByDay !== null) {
+            Object.entries(patientsByDay).forEach(([date, patientsOnDay]) => {
+                if (Array.isArray(patientsOnDay)) {
+                    let patientFound = patientsOnDay.some(patient => patient.patient_id == id_patient);
+                    if (patientFound) {
+                        allowedDays.add(date); // Store allowed dates
+                    }
+                }
+            });
+        }
+
+        // Find disallowed days (days in the month that are NOT in allowedDays)
+        let disallowedDays = [...allDays].filter(date => !allowedDays.has(date));
+
+        return disallowedDays; // Return only the dates that are not allowed
+    }
+
+
+    function setFlatpickrDatepickers() {
         let firstDay = new Date(year, month - 1, 1);
         let lastDay = new Date(year, month, 0);
 
         document.getElementById("start_date_patient").value = firstDay.toLocaleDateString("sv-SE");
         document.getElementById("end_date_patient").value = lastDay.toLocaleDateString("sv-SE");
 
-        function applyFlatpickr(inputId, multiple = false) {
-            flatpickr(inputId, {
-                mode: multiple ? "multiple" : "single",
+        let patientId = document.getElementById("patient_input_id").value;
+        let disabledDays = getDisallowedDaysForPatient(patientId, patients_by_day, firstDay, lastDay);
+
+
+        let datePickers = {};
+
+        function applyFlatpickr(inputId) {
+            let inputElem = document.getElementById(inputId);
+            let index = inputId.split("_")[2];
+            let hiddenInput = document.getElementById(`dates_list_${index}`);
+            let copyPasteArea = document.getElementById(`copy_paste_dates_${index}`);
+
+            datePickers[inputId] = flatpickr(inputElem, {
+                mode: "multiple",
                 dateFormat: "Y-m-d",
                 minDate: firstDay,
                 maxDate: lastDay,
                 enableTime: false,
-                locale: {
-                    firstDayOfWeek: 1
-                },
-                onChange: function (selectedDates, dateStr, instance) {
-                    let selectedContainer = document.getElementById(`selected_dates_${inputId.split("_")[2]}`);
-                    let hiddenInput = document.getElementById(`dates_list_${inputId.split("_")[2]}`);
-
-                    // Clear previous selections
-                    selectedContainer.innerHTML = "";
-
-                    // Create tokens for selected dates
-                    let selectedValues = [];
-                    selectedDates.forEach(date => {
-                        let formattedDate = date.toLocaleDateString("sv-SE"); // ✅ Ensures correct YYYY-MM-DD format
-
-                        selectedValues.push(formattedDate);
-
-                        let token = document.createElement("span");
-                        token.classList.add("small-token");
-                        token.textContent = formattedDate;
-
-                        // Remove date on click
-                        token.addEventListener("click", function () {
-                            selectedValues = selectedValues.filter(d => d !== formattedDate);
-                            hiddenInput.value = selectedValues.join(",");
-                            token.remove();
-                        });
-
-                        selectedContainer.appendChild(token);
-                    });
-
-                    // Update hidden input with selected dates
-                    hiddenInput.value = selectedValues.join(",");
+                allowInput: true,
+                disable: disabledDays,
+                locale: { firstDayOfWeek: 1 },
+                onChange: function (selectedDates) {
+                    updateDateFields(index, selectedDates);
+                    inputElem.value = "";
                 }
             });
+
+            function updateDateFields(index, selectedDates) {
+                let selectedValues = selectedDates.map(date => date.toISOString().split("T")[0]); // Convert to YYYY-MM-DD format
+
+                // Update hidden input and copy-paste area
+                hiddenInput.value = selectedValues.join(",");
+                copyPasteArea.value = selectedValues.join(", ");
+            }
         }
 
-        applyFlatpickr("#date_picker_0", true);
-        applyFlatpickr("#date_picker_1", true);
-        applyFlatpickr("#date_picker_2", true);
-        applyFlatpickr("#date_picker_3", true);
-        applyFlatpickr("#date_picker_4", true);
-        applyFlatpickr("#date_picker_5", false);
-        applyFlatpickr("#date_picker_6", false);
-        applyFlatpickr("#date_picker_7", false);
-        applyFlatpickr("#date_picker_8", false);
-    });
+        window.copyDates = function (index) {
+            let textArea = document.getElementById(`copy_paste_dates_${index}`);
+            textArea.select();
+            document.execCommand("copy");
+        };
+
+        window.pasteDates = function (index) {
+            let textArea = document.getElementById(`copy_paste_dates_${index}`);
+            let dates = textArea.value.split(",").map(date => date.trim()).filter(date => date);
+
+            if (datePickers[`date_picker_${index}`]) {
+                // Convert pasted strings to Date objects
+                let parsedDates = dates.map(dateStr => new Date(dateStr));
+
+                // Set the dates in Flatpickr
+                datePickers[`date_picker_${index}`].setDate(parsedDates, true);
+
+                // Ensure the hidden input and textarea reflect the new dates
+                updateDateFields(index, parsedDates);
+            }
+        };
+
+        for (let i = 1; i < 9; i++) {
+            applyFlatpickr(`date_picker_${i}`);
+        }
+    }
 
     async function schedulePatientsMonth() {
         const loader = document.getElementById("loader");
@@ -852,28 +1028,44 @@
                 continue;
             }
 
-            let request = {
-                origin: startAddress,
-                destination: startAddress,
-                waypoints: waypoints,
-                optimizeWaypoints: customRouteCheckbox.checked,
-                travelMode: google.maps.TravelMode.DRIVING
-            };
+            // 🔹 **Split into chunks of max 20 stops**
+            let routeChunks = splitWaypoints(waypoints, 20);
+            let previousEnd = startAddress;
+            let fullRouteLegs = [];
 
-            await new Promise((resolve) => {
-                directionsService.route(request, async function (result, status) {
-                    if (status === google.maps.DirectionsStatus.OK) {
-                        let optimizedWaypointsOrder = result.routes[0].waypoint_order;
-                        let reorderedWaypoints = optimizedWaypointsOrder.map(index => originalWaypoints[index]);
+            for (let i = 0; i < routeChunks.length; i++) {
+                let segmentWaypoints = routeChunks[i];
 
-                        let scheduleData = await processRouteTimes(result, selectedDate, reorderedWaypoints);
-                        generatedSchedule.push(...scheduleData);
-                    } else {
-                        console.error(`Error fetching route for ${selectedDate}:`, status);
-                    }
-                    resolve();
+                let isLastSegment = (i === routeChunks.length - 1);
+                let segmentDestination = isLastSegment ? startAddress : segmentWaypoints.pop().location;
+
+                let request = {
+                    origin: previousEnd,
+                    destination: segmentDestination,
+                    waypoints: segmentWaypoints,
+                    optimizeWaypoints: customRouteCheckbox.checked,
+                    travelMode: google.maps.TravelMode.DRIVING
+                };
+
+                await new Promise((resolve) => {
+                    directionsService.route(request, async function (result, status) {
+                        if (status === google.maps.DirectionsStatus.OK) {
+                            let optimizedWaypointsOrder = result.routes[0].waypoint_order;
+                            let reorderedWaypoints = optimizedWaypointsOrder.map(index => originalWaypoints[index]);
+
+                            fullRouteLegs.push(...result.routes[0].legs); // 🔹 Merge legs into one list
+
+                            let scheduleData = await processRouteTimes(fullRouteLegs, selectedDate, reorderedWaypoints);
+                            generatedSchedule.push(...scheduleData);
+                        } else {
+                            console.error(`Error fetching route for ${selectedDate}:`, status);
+                        }
+                        resolve();
+                    });
                 });
-            });
+
+                previousEnd = segmentDestination;
+            }
         }
 
         setTimeout(() => {
@@ -882,7 +1074,7 @@
         }, 3000);
     }
 
-    async function processRouteTimes(result, selectedDate, waypoints) {
+    async function processRouteTimes(legs, selectedDate, waypoints) {
         let startTimeInput = document.getElementById("zs_start_time").value;
         let writeStartTimeInput = document.getElementById("write_start_time").value;
 
@@ -892,18 +1084,15 @@
         const waitTime = 20;
         const writeTimeIncrease = 5;
 
-        let legs = result.routes[0].legs;
         let scheduleData = [];
 
-        for (let i = 0; i < legs.length; i++) {
-            let leg = legs[i];
-
-            if (!waypoints[i]) {
-                console.warn(`Missing waypoint for leg ${i}`);
-                continue;
+        legs.forEach((leg, index) => {
+            if (!waypoints[index]) {
+                console.warn(`Missing waypoint for leg ${index}`);
+                return;
             }
 
-            let patientId = waypoints[i].patient_id;
+            let patientId = waypoints[index].patient_id;
 
             function getRandomTimeOffset() {
                 return Math.floor(Math.random() * 31) - 30;
@@ -927,13 +1116,12 @@
                 arrival_time: formattedArrivalTime,
                 write_time: formattedWriteTime
             });
-        }
+        });
 
         return scheduleData;
     }
 
     function sendScheduleToBackend(scheduleData, sestra_id) {
-        console.log("Sending schedule to backend:", scheduleData);
         fetch("/update_schedule", {
             method: "POST",
             headers: {
@@ -958,8 +1146,15 @@
         const patientButtons = document.querySelectorAll(".small-token");
         const patientInfoDiv = document.querySelector(".patient-info");
 
+        let parsedPatients = JSON.parse(patients_in_month);
+
+        if (!Array.isArray(parsedPatients)) {
+            console.error("Parsed data is not an array:", parsedPatients);
+            return;
+        }
+
         let patientData = {};
-        patients_in_month.forEach(patient => {
+        parsedPatients.forEach(patient => {
             patientData[patient.id] = patient;
         });
 
@@ -980,25 +1175,36 @@
 
                     // Populate hidden input with patient ID
                     document.getElementById("patient_input_id").value = patientId;
+                    document.getElementById("entry_number").value = patient.cislo_dekurzu || "";
 
-                    // Populate additional field
-                    document.getElementById("hl-text").value = patient.nalez;
-                    document.getElementById("podtext-1").value = patient.osetrenie;
-                    document.getElementById("podtext-2").value = patient.vedlajsie_osetrenie;
-                    document.getElementById("podtext-3").value = patient.poznamka1;
-                    document.getElementById("podtext-4").value = patient.poznamka2;
-                    document.getElementById("koniec-mesiaca").value = patient.koniec_mesiaca;
-                    document.getElementById("entry_number").value = patient.cislo_dekurzu;
-                    document.getElementById("date_picker_1").value = "";
-                    document.getElementById("date_picker_2").value = "";
-                    document.getElementById("date_picker_3").value = "";
-                    document.getElementById("date_picker_4").value = "";
-                    document.getElementById("date_picker_5").value = "";
-                    document.getElementById("date_picker_1")._flatpickr.clear();
-                    document.getElementById("date_picker_2")._flatpickr.clear();
-                    document.getElementById("date_picker_3")._flatpickr.clear();
-                    document.getElementById("date_picker_4")._flatpickr.clear();
-                    document.getElementById("date_picker_5")._flatpickr.clear();
+                    setFlatpickrDatepickers();
+
+                    for (let i = 1; i <= 8; i++) {
+                        let podtextField = document.getElementById(`podtext-${i}`);
+                        if (podtextField) {
+                            podtextField.value = patient[`dekurz_text_${i}`] || "";
+                        }
+                    }
+
+                    // Reset and update Flatpickr date pickers dynamically
+                    for (let i = 1; i <= 8; i++) {
+                        let datePicker = document.getElementById(`date_picker_${i}`);
+                        let hiddenDateList = document.getElementById(`dates_list_${i}`);
+
+                        if (datePicker && datePicker._flatpickr) {
+                            datePicker._flatpickr.clear(); // Clear previous selections
+                        }
+
+                        if (patient[`dekurz_dates_${i}`]) {
+                            let dates = patient[`dekurz_dates_${i}`].split(",").map(date => date.trim()); // Convert string to array
+                            if (datePicker && datePicker._flatpickr) {
+                                datePicker._flatpickr.setDate(dates, true); // Set new dates in Flatpickr
+                            }
+                            if (hiddenDateList) {
+                                hiddenDateList.value = dates.join(", "); // Update hidden field
+                            }
+                        }
+                    }
                 } else {
                     console.warn("Patient not found in preloaded data.");
                 }
@@ -1061,7 +1267,6 @@
             console.error("Error generating schedule:", error);
         }
     }
-
 
 
     // function applyDragAndDrop() {
