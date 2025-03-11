@@ -23,6 +23,7 @@
         <div class="one-line">
             <h2>{{ nurse['meno'] }}</h2>
             <a href="{{ url_for('index') }}">Odhlásiť sa</a>
+            <a href="#" onclick="shutDown(); return false;">Vypnúť aplikáciu</a>
         </div>
     </div>
 
@@ -233,7 +234,7 @@
                         <input type="hidden" id="dates_list_{{ i }}" name="dates_list_{{ i }}">
                     
                         <textarea id="copy_paste_dates_{{ i }}" class="copy-paste-dates" rows="1"
-                            placeholder="Copy/paste dates here"></textarea>
+                            placeholder="Kopírujte dátumy sem"></textarea>
                     </div>
                 </div>
                 {% endfor %}
@@ -913,7 +914,6 @@
         return disallowedDays; // Return only the dates that are not allowed
     }
 
-
     function setFlatpickrDatepickers() {
         let firstDay = new Date(year, month - 1, 1);
         let lastDay = new Date(year, month, 0);
@@ -923,7 +923,6 @@
 
         let patientId = document.getElementById("patient_input_id").value;
         let disabledDays = getDisallowedDaysForPatient(patientId, patients_by_day, firstDay, lastDay);
-
 
         let datePickers = {};
 
@@ -949,41 +948,51 @@
             });
 
             function updateDateFields(index, selectedDates) {
-                let selectedValues = selectedDates.map(date => date.toISOString().split("T")[0]); // Convert to YYYY-MM-DD format
+                let selectedValues = selectedDates.map(date => {
+                    let adjustedDate = new Date(date);
+                    adjustedDate.setDate(adjustedDate.getDate() + 1); // Add one day
+                    return adjustedDate.toISOString().split("T")[0]; // Convert to YYYY-MM-DD
+                });
 
-                // Update hidden input and copy-paste area
+                let hiddenInput = document.getElementById(`dates_list_${index}`);
+                let copyPasteArea = document.getElementById(`copy_paste_dates_${index}`);
+
                 hiddenInput.value = selectedValues.join(",");
                 copyPasteArea.value = selectedValues.join(", ");
             }
         }
-
-        window.copyDates = function (index) {
-            let textArea = document.getElementById(`copy_paste_dates_${index}`);
-            textArea.select();
-            document.execCommand("copy");
-        };
-
-        window.pasteDates = function (index) {
-            let textArea = document.getElementById(`copy_paste_dates_${index}`);
-            let dates = textArea.value.split(",").map(date => date.trim()).filter(date => date);
-
-            if (datePickers[`date_picker_${index}`]) {
-                // Convert pasted strings to Date objects
-                let parsedDates = dates.map(dateStr => new Date(dateStr));
-
-                // Set the dates in Flatpickr
-                datePickers[`date_picker_${index}`].setDate(parsedDates, true);
-
-                // Ensure the hidden input and textarea reflect the new dates
-                updateDateFields(index, parsedDates);
-            }
-        };
 
         for (let i = 1; i < 9; i++) {
             applyFlatpickr(`date_picker_${i}`);
         }
     }
 
+    document.addEventListener("DOMContentLoaded", function () {
+        function updateHiddenInput(index) {
+            let copyPasteArea = document.getElementById(`copy_paste_dates_${index}`);
+            let hiddenInput = document.getElementById(`dates_list_${index}`);
+
+            if (!copyPasteArea || !hiddenInput) {
+                console.warn(`Missing elements for index ${index}`);
+                return;
+            }
+
+            copyPasteArea.addEventListener("input", function () {
+                let dates = copyPasteArea.value
+                    .split(",") // Split by commas
+                    .map(date => date.trim()) // Remove extra spaces
+                    .filter(date => date); // Remove empty values
+
+                hiddenInput.value = dates.join(","); // Update the hidden input
+            });
+        }
+
+        // Apply to all `copy_paste_dates_X` textareas
+        for (let i = 1; i <= 8; i++) {
+            updateHiddenInput(i);
+        }
+    });
+    
     async function schedulePatientsMonth() {
         const loader = document.getElementById("loader");
         loader.classList.add("loader-active");
@@ -1165,6 +1174,7 @@
                 if (patientId in patientData) {
                     let patient = patientData[patientId];
 
+
                     // Update the patient-info div with the clicked patient's details
                     patientInfoDiv.innerHTML = `
                         <p><strong>Meno:</strong> ${patient.meno}</p>
@@ -1177,31 +1187,31 @@
                     document.getElementById("patient_input_id").value = patientId;
                     document.getElementById("entry_number").value = patient.cislo_dekurzu || "";
 
-                    setFlatpickrDatepickers();
-
                     for (let i = 1; i <= 8; i++) {
                         let podtextField = document.getElementById(`podtext-${i}`);
                         if (podtextField) {
-                            podtextField.value = patient[`dekurz_text_${i}`] || "";
+                            podtextField.value = patient[`dekurz_text_${i - 1}`];
                         }
                     }
 
-                    // Reset and update Flatpickr date pickers dynamically
+                    setFlatpickrDatepickers();
+
+                    
                     for (let i = 1; i <= 8; i++) {
                         let datePicker = document.getElementById(`date_picker_${i}`);
                         let hiddenDateList = document.getElementById(`dates_list_${i}`);
 
                         if (datePicker && datePicker._flatpickr) {
-                            datePicker._flatpickr.clear(); // Clear previous selections
+                            datePicker._flatpickr.clear();
                         }
 
                         if (patient[`dekurz_dates_${i}`]) {
                             let dates = patient[`dekurz_dates_${i}`].split(",").map(date => date.trim()); // Convert string to array
                             if (datePicker && datePicker._flatpickr) {
-                                datePicker._flatpickr.setDate(dates, true); // Set new dates in Flatpickr
+                                datePicker._flatpickr.setDate(dates, true);
                             }
                             if (hiddenDateList) {
-                                hiddenDateList.value = dates.join(", "); // Update hidden field
+                                hiddenDateList.value = dates.join(", ");
                             }
                         }
                     }
@@ -1215,22 +1225,21 @@
     async function updateForDekurz() {
         let patientData = {
             patient_id: document.getElementById("patient_input_id").value,
-            nalez: document.getElementById("hl-text").value,
-            podtext_1: document.getElementById("podtext-1").value,
-            dates_list_1: document.getElementById("dates_list_1").value.split(",").filter(d => d), // Remove empty values
-            podtext_2: document.getElementById("podtext-2").value,
-            dates_list_2: document.getElementById("dates_list_2").value.split(",").filter(d => d),
-            podtext_3: document.getElementById("podtext-3").value,
-            dates_list_3: document.getElementById("dates_list_3").value.split(",").filter(d => d),
-            podtext_4: document.getElementById("podtext-4").value,
-            dates_list_4: document.getElementById("dates_list_4").value.split(",").filter(d => d),
-            koniec_mesiaca: document.getElementById("koniec-mesiaca").value,
-            date_picker_5: document.getElementById("dates_list_5").value,
             entry_number: document.getElementById("entry_number").value,
             nurse_id: document.getElementById("nurse_id").value,
             start: document.getElementById("start_date_patient").value,
-            end: document.getElementById("end_date_patient").value,
+            end: document.getElementById("end_date_patient").value
         };
+
+        for (let i = 1; i < 9; i++) {
+            patientData[`podtext_${i}`] = document.getElementById(`podtext-${i}`).value;
+            patientData[`dates_list_${i}`] = document.getElementById(`dates_list_${i}`).value
+                .split(",")
+                .map(date => date.trim())
+                .filter(date => date);
+        }
+
+
 
         try {
             let response = await fetch("/update_patient", {
@@ -1268,55 +1277,21 @@
         }
     }
 
+    function shutDown() {
+        fetch("/shutdown", {
+            method: "POST"
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log("Server shutdown successful.");
+                } else {
+                    console.error("Error shutting down server:", data.error);
+                }
+            })
+            .catch(error => {
+                console.error("Error shutting down server:", error);
+            });
+    }
 
-    // function applyDragAndDrop() {
-    //     let items = document.querySelectorAll(".token");
-
-    //     items.forEach((item) => {
-    //         item.draggable = true;
-    //         item.removeEventListener("dragstart", dragStart);
-    //         item.removeEventListener("dragend", dragEnd);
-    //         item.addEventListener("dragstart", dragStart);
-    //         item.addEventListener("dragend", dragEnd);
-    //     });
-    // }
-
-    // function dragStart(e) {
-    //     e.target.classList.add("dragging");
-    // }
-
-    // function dragEnd(e) {
-    //     e.target.classList.remove("dragging");
-    //     updateRoute();
-    // }
-
-    // document.getElementById("draggable-container").addEventListener("dragover", (e) => {
-    //     e.preventDefault();
-    //     const container = document.getElementById("draggable-container");
-    //     const afterElement = getDragAfterElement(container, e.clientY);
-    //     const draggedItem = document.querySelector(".dragging");
-    //     if (draggedItem) {
-    //         if (afterElement == null) {
-    //             container.appendChild(draggedItem);
-    //         } else {
-    //             container.insertBefore(draggedItem, afterElement);
-    //         }
-    //     }
-    // });
-
-    // function getDragAfterElement(container, y) {
-    //     const draggableElements = [...container.querySelectorAll(".token:not(.dragging)")];
-
-    //     return draggableElements.reduce((closest, child) => {
-    //         const box = child.getBoundingClientRect();
-    //         const offset = y - box.top - box.height / 2;
-    //         if (offset < 0 && offset > closest.offset) {
-    //             return { offset: offset, element: child };
-    //         } else {
-    //             return closest;
-    //         }
-    //     }, { offset: Number.NEGATIVE_INFINITY }).element;
-    // }
-
-    // document.addEventListener("DOMContentLoaded", applyDragAndDrop);
 </script>

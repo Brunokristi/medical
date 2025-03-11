@@ -18,7 +18,7 @@ import calendar
 from reportlab.lib.utils import simpleSplit
 from flask_socketio import SocketIO
 import json
-
+import signal
 
 
 app = Flask(__name__)
@@ -42,7 +42,7 @@ def replace_slovak_chars(text):
 def split_by_chars(text, char_limit):
     return [text[i:i + char_limit] for i in range(0, len(text), char_limit)]
 
-def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, hl_text, podtext_1, podtext_2, koniec_mesiaca):
+def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number):
     if os.name == "nt":  # Windows
         documents_path = os.path.join(os.environ["USERPROFILE"], "Desktop", "ADOS")
     else:  # macOS/Linux
@@ -124,6 +124,7 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
     bottom_limit = page_margin + 60  # Avoid printing too low
 
     for date, zs_time, write_time, text in editable_schedule:
+        print(text)
         text = replace_slovak_chars(zs_time + ": " + text)
         c.setFont("Helvetica", 10)
 
@@ -325,32 +326,44 @@ def generate_schedule():
         if not request.is_json:
             return jsonify({"error": "Invalid request format, expected JSON"}), 400
 
+
+        print("hallopooo")
         data = request.get_json()
         patient_id = data.get("patient_id")
         nalez = data.get("nalez", "")
-        podtext_1 = data.get("podtext_1", "")
-        dates_list_1 = data.get("dates_list_1", []) if isinstance(data.get("dates_list_1"), list) else []
+        dekurz_text_0 = data.get("podtext_1", "")
+        dates_list_0 = data.get("dates_list_1", []) if isinstance(data.get("dates_list_1"), list) else []
 
-        podtext_2 = data.get("podtext_2", "")
-        dates_list_2 = data.get("dates_list_2", []) if isinstance(data.get("dates_list_2"), list) else []
+        dekurz_text_1 = data.get("podtext_2", "")
+        dates_list_1 = data.get("dates_list_2", []) if isinstance(data.get("dates_list_2"), list) else []
 
-        podtext_3 = data.get("podtext_3", "")
-        dates_list_3 = data.get("dates_list_3", []) if isinstance(data.get("dates_list_3"), list) else []
+        dekurz_text_2 = data.get("podtext_3", "")
+        dates_list_2 = data.get("dates_list_3", []) if isinstance(data.get("dates_list_3"), list) else []
 
-        podtext_4 = data.get("podtext_4", "")
-        dates_list_4 = data.get("dates_list_4", []) if isinstance(data.get("dates_list_4"), list) else []
+        dekurz_text_3 = data.get("podtext_4", "")
+        dates_list_3 = data.get("dates_list_4", []) if isinstance(data.get("dates_list_4"), list) else []
 
-        koniec_mesiaca = data.get("koniec_mesiaca", "")
-        date_picker_5 = data.get("date_picker_5", None)
+        dekurz_text_4 = data.get("podtext_5", "")
+        dates_list_4 = data.get("dates_list_5", []) if isinstance(data.get("dates_list_4"), list) else []
+
+        dekurz_text_5 = data.get("podtext_6", "")
+        dates_list_5 = data.get("dates_list_6", []) if isinstance(data.get("dates_list_4"), list) else []
+
+        dekurz_text_6 = data.get("podtext_7", "")
+        dates_list_6 = data.get("dates_list_7", []) if isinstance(data.get("dates_list_4"), list) else []
+
+        dekurz_text_7 = data.get("podtext_8", "")
+        dates_list_7 = data.get("dates_list_8", []) if isinstance(data.get("dates_list_4"), list) else []
 
         entry_number = data.get("entry_number", "")
 
         nurse_id = data.get("nurse_id")
 
-
         start = datetime.strptime(data.get("start"), "%Y-%m-%d").date()
         end = datetime.strptime(data.get("end"), "%Y-%m-%d").date()
         end = end + timedelta(days=1)
+
+        print("Start:", start)
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -364,6 +377,8 @@ def generate_schedule():
 
         if not patient:
             return jsonify({"error": "Patient not found"}), 404
+        
+        print("Patient:", patient)
 
         meno, rodne_cislo, adresa, poistovna, company = patient
 
@@ -399,13 +414,14 @@ def generate_schedule():
                             text_by_date[date] = []
                         text_by_date[date].append(text)
 
-        # 🔹 Add texts to dates
-        add_text_to_date(dates_list_1, podtext_1)
-        add_text_to_date(dates_list_2, podtext_2)
-        add_text_to_date(dates_list_3, podtext_3)
-        add_text_to_date(dates_list_4, podtext_4)
-        if date_picker_5:
-            add_text_to_date([date_picker_5], koniec_mesiaca)
+        add_text_to_date(dates_list_0, dekurz_text_0)
+        add_text_to_date(dates_list_1, dekurz_text_1)
+        add_text_to_date(dates_list_2, dekurz_text_2)
+        add_text_to_date(dates_list_3, dekurz_text_3)
+        add_text_to_date(dates_list_4, dekurz_text_4)
+        add_text_to_date(dates_list_5, dekurz_text_5)
+        add_text_to_date(dates_list_6, dekurz_text_6)
+        add_text_to_date(dates_list_7, dekurz_text_7)
 
         final_schedule = []
         for date, arrival_time, write_time in schedule_entries:
@@ -416,7 +432,7 @@ def generate_schedule():
             final_schedule.append([date, arrival_time, write_time, combined_text])
 
         print("Final schedule:", final_schedule)
-        generate_pdf(final_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number, nalez, podtext_1, podtext_2, koniec_mesiaca)
+        generate_pdf(final_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number)
 
         return jsonify({"success": True})
     except Exception as e:
@@ -497,9 +513,6 @@ def search_patient():
                 "insurance": row["poistovna"],  # Poistovňa
                 "worker": row["sestra"],  # ID sestry (can be used to fetch name)
                 "company": row["ados"],  # ADOS
-                "hl_text": row["nalez"],  # Hlavný text
-                "podtext_1": row["osetrenie"],  # Podtext 1
-                "podtext_2": row["vedlajsie_osetrenie"],  # Podtext 2
                 "koniec_mesiaca": row["koniec_mesiaca"],  # Text koniec mesiaca
                 "entry_number": row["cislo_dekurzu"]  # Číslo dekurzu
             })
@@ -539,16 +552,17 @@ def update_patient():
         # Update patient details
         cursor.execute("""
             UPDATE pacienti 
-            SET nalez = ?, osetrenie = ?, vedlajsie_osetrenie = ?, poznamka1 = ?, poznamka2 = ?, 
-                koniec_mesiaca = ?, cislo_dekurzu = ?
+            SET dekurz_text_0 = ?, dekurz_text_1 = ?, dekurz_text_2 = ?, dekurz_text_3 = ?, dekurz_text_4 = ?, dekurz_text_5 = ?, dekurz_text_6 = ?, dekurz_text_7 = ?, cislo_dekurzu = ?
             WHERE id = ?
         """, (
-            data.get("nalez", ""),
             data.get("podtext_1", ""),
             data.get("podtext_2", ""),
             data.get("podtext_3", ""),
             data.get("podtext_4", ""),
-            data.get("koniec_mesiaca", ""),
+            data.get("podtext_5", ""),
+            data.get("podtext_6", ""),
+            data.get("podtext_7", ""),
+            data.get("podtext_8", ""),
             data.get("entry_number", ""),
             patient_id
         ))
@@ -839,7 +853,6 @@ def detail(nurse_id, year, month, day):
                 SELECT * FROM mesiac WHERE mesiac = ? AND rok = ? AND sestra_id = ?
             """, (month, year, nurse_id))
             month_data = cursor.fetchone()
-            print("month", month_data["id"], month_data["mesiac"], month_data["rok"], month_data["vysetrenie_start"], month_data["vysetrenie_koniec"], month_data["vypis_start"], month_data["vypis_koniec"], month_data["sestra_id"])
 
             if month_data:
                 cursor.execute("SELECT id, datum FROM dni WHERE mesiac = ?", (month_data["id"],))
@@ -856,12 +869,11 @@ def detail(nurse_id, year, month, day):
                 """, (month_data["id"],))
 
                 patients_in_month = [dict(row) for row in cursor.fetchall()]
-                print("Patients in Month (Converted to Dicts):", patients_in_month)
 
                 
 
                 cursor.execute("""
-                    SELECT dni.datum AS day_date, pacienti.id AS patient_id, pacienti.meno AS patient_name, pacienti.adresa AS patient_adresa, pacienti.rodne_cislo
+                    SELECT dni.datum AS day_date, pacienti.id AS patient_id, pacienti.meno AS patient_name, pacienti.adresa AS patient_adresa, pacienti.rodne_cislo, *
                     FROM pacienti
                     JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
                     JOIN dni ON den_pacient.den_id = dni.id
@@ -896,7 +908,6 @@ def detail(nurse_id, year, month, day):
     except Exception as e:
         flash(f"Chyba: {e}", "danger")
         return redirect(url_for("index"))
-
 
 
 
@@ -1015,7 +1026,37 @@ def update_existing_db():
 
         conn.commit()
 
-        print("Database updated successfully with new fields and migrated data.")
+
+
+
+
+def shutdown_server():
+    """Shuts down the Flask server gracefully."""
+    func = request.environ.get('werkzeug.server.shutdown')
+
+    if func:
+        print("✅ Gracefully shutting down Flask via werkzeug...")
+        func()
+    else:
+        print("⚠️ Server shutdown function not available, using alternative method...")
+        threading.Thread(target=terminate_process).start()
+
+def terminate_process():
+    """Terminates the Flask process safely."""
+    try:
+        print("🛑 Terminating Flask process...")
+        os.kill(os.getpid(), signal.SIGTERM)  # Try SIGTERM first
+    except Exception as e:
+        print(f"❌ Failed to terminate process: {e}")
+        sys.exit(0)  # Force exit if needed
+
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    """API endpoint to trigger Flask shutdown."""
+    shutdown_server()
+    return "✅ Flask server is shutting down gracefully...", 200
+
+
 
 if __name__ == "__main__":
     check_db()
