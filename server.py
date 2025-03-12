@@ -920,11 +920,10 @@ def get_db_connection():
     return conn
 
 def check_db():
-    """Checks if the database file exists; if not, initializes it."""
     if not os.path.exists(DATABASE_FILE):
         initialize_db()
     else:
-        update_existing_db()
+        update_pacienti_table()
 
 def initialize_db():
     """Creates the database from scratch."""
@@ -997,32 +996,34 @@ def initialize_db():
         """)
 
 
-def update_existing_db():
+def update_pacienti_table():
+    print("updating database")
     with sqlite3.connect(DATABASE_FILE) as conn:
         cursor = conn.cursor()
 
-        # Fetch existing column names
-        cursor.execute(f"PRAGMA table_info(pacienti)")
-        existing_columns = [row[1] for row in cursor.fetchall()]
+        cursor.execute("PRAGMA table_info(pacienti)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
 
-        # Add new dekurz text fields if they don't exist
-        for i in range(9):
-            column_name = f"dekurz_text_{i}"
+        new_columns = [f"dekurz_text_{i}" for i in range(9)]
+
+        for column_name in new_columns:
             if column_name not in existing_columns:
                 cursor.execute(f"ALTER TABLE pacienti ADD COLUMN {column_name} TEXT;")
 
-        conn.commit()
+        conn.commit() 
 
-        cursor.execute("""
-            UPDATE pacienti 
-            SET 
-                dekurz_text_0 = nalez,
-                dekurz_text_1 = osetrenie,
-                dekurz_text_2 = vedlajsie_osetrenie,
-                dekurz_text_3 = poznamka1,
-                dekurz_text_4 = poznamka2,
-                dekurz_text_5 = koniec_mesiaca
-        """)
+        # Update only if new columns were added
+        if any(column not in existing_columns for column in new_columns):
+            cursor.execute("""
+                UPDATE pacienti 
+                SET 
+                    dekurz_text_0 = nalez,
+                    dekurz_text_1 = osetrenie,
+                    dekurz_text_2 = vedlajsie_osetrenie,
+                    dekurz_text_3 = poznamka1,
+                    dekurz_text_4 = poznamka2,
+                    dekurz_text_5 = koniec_mesiaca
+            """)
 
         conn.commit()
 

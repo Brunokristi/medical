@@ -158,7 +158,7 @@
 
                 <div class="one-line">
                     <button class="btn warning" onclick="clearInputs()">Vymazať</button>
-                    <button class="btn" onclick="postPatientAndSchedule(); clearInputs()">Pridať</button>
+                    <button class="btn" onclick="postPatientAndSchedule(); clearInputs(); updatePatientList(days[0].datum);">Pridať</button>
                 </div>
             </div>
 
@@ -238,7 +238,10 @@
                     </div>
                 </div>
                 {% endfor %}
+            </div>
+        </div>
 
+            <div class="bottom">
                 <div class="form-group">
                     <label for="entry_number" style="margin-top: 30px;">Číslo dekurzu</label>
                     <input type="number" id="entry_number" name="entry_number" required>
@@ -248,7 +251,8 @@
                     <button type="button" class="btn" onclick="updateForDekurz()">Vytvoriť Dekurz</button>
                 </div>
             </div>
-        </div>
+            
+        
     </div>
 
 </body>
@@ -272,6 +276,7 @@
     window.onload = function () {
         setTodayDate();
         updateCalendar();
+        updatePatientList(days[0].datum);
     };
 
     
@@ -515,61 +520,61 @@
                 updateRoute();
 
             }
-        });
-
-        function updatePatientList(selectedDate) {
-            patientList.innerHTML = "";
-
-            if (patients_by_day[selectedDate]) {
-                patients_by_day[selectedDate].forEach(patient => {
-                    let patientToken = document.createElement("div");
-                    patientToken.classList.add("draggable", "token");
-                    patientToken.setAttribute("draggable", "true");
-                    patientToken.setAttribute("data-rc", patient.patient_rc);
-                    patientToken.setAttribute("data-id", patient.patient_id);
-                    patientToken.setAttribute("data-name", patient.patient_name);
-                    patientToken.setAttribute("data-address", patient.patient_address);
-                    patientToken.setAttribute("data-insurance", patient.insurance);
-                    patientToken.setAttribute("data-company", patient.company);
-                    patientToken.textContent = `${patient.patient_name}`;
-
-                    // Add click event to populate inputs
-                    patientToken.addEventListener("click", function () {
-                        document.getElementById("rodne_cislo").value = this.getAttribute("data-rc");
-                        document.getElementById("meno").value = this.getAttribute("data-name");
-                        document.getElementById("adresa").value = this.getAttribute("data-address");
-                        setSelectValue("poistovna", this.getAttribute("data-insurance"));
-                        setSelectValue("company", this.getAttribute("data-company"));
-                    });
-
-                    // Create delete icon
-                    let deleteIcon = document.createElement("span");
-                    deleteIcon.innerHTML = "X";
-                    deleteIcon.classList.add("delete-icon");
-
-                    // Delete event listener
-                    deleteIcon.addEventListener("click", function (event) {
-                        event.stopPropagation();
-                        showDeletePopup(patientToken, patient.patient_id, selectedDate);
-                    });
-
-                    // Append delete icon to the patient token
-                    patientToken.appendChild(deleteIcon);
-                    patientList.appendChild(patientToken);
-                });
-            }
-        }
-
-        function showDeletePopup(element, patientId, selectedDate) {
-            let popup = document.getElementById("delete-popup");
-            let overlay = document.getElementById("overlay");
-
-            popup.style.display = "block";
-            overlay.style.display = "block";
-
-            window.selectedPatient = { element, patientId, selectedDate };
-        }
+        });  
     });
+
+    function showDeletePopup(element, patientId, selectedDate) {
+        let popup = document.getElementById("delete-popup");
+        let overlay = document.getElementById("overlay");
+
+        popup.style.display = "block";
+        overlay.style.display = "block";
+
+        window.selectedPatient = { element, patientId, selectedDate };
+    }
+
+    function updatePatientList(selectedDate) {
+        patientList.innerHTML = "";
+
+        if (patients_by_day[selectedDate]) {
+            patients_by_day[selectedDate].forEach(patient => {
+                let patientToken = document.createElement("div");
+                patientToken.classList.add("draggable", "token");
+                patientToken.setAttribute("draggable", "true");
+                patientToken.setAttribute("data-rc", patient.patient_rc);
+                patientToken.setAttribute("data-id", patient.patient_id);
+                patientToken.setAttribute("data-name", patient.patient_name);
+                patientToken.setAttribute("data-address", patient.patient_address);
+                patientToken.setAttribute("data-insurance", patient.insurance);
+                patientToken.setAttribute("data-company", patient.company);
+                patientToken.textContent = `${patient.patient_name}`;
+
+                // Add click event to populate inputs
+                patientToken.addEventListener("click", function () {
+                    document.getElementById("rodne_cislo").value = this.getAttribute("data-rc");
+                    document.getElementById("meno").value = this.getAttribute("data-name");
+                    document.getElementById("adresa").value = this.getAttribute("data-address");
+                    setSelectValue("poistovna", this.getAttribute("data-insurance"));
+                    setSelectValue("company", this.getAttribute("data-company"));
+                });
+
+                // Create delete icon
+                let deleteIcon = document.createElement("span");
+                deleteIcon.innerHTML = "X";
+                deleteIcon.classList.add("delete-icon");
+
+                // Delete event listener
+                deleteIcon.addEventListener("click", function (event) {
+                    event.stopPropagation();
+                    showDeletePopup(patientToken, patient.patient_id, selectedDate);
+                });
+
+                // Append delete icon to the patient token
+                patientToken.appendChild(deleteIcon);
+                patientList.appendChild(patientToken);
+            });
+        }
+    }
 
     function deletePatientDatabase() {
         let { element, patientId } = window.selectedPatient;

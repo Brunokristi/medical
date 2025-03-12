@@ -77,6 +77,7 @@ h3 {
 .right {
     background-color: #fff;
     width: 70%;
+    padding-bottom: 200px;
 }
 
 .section {
@@ -503,4 +504,17 @@ textarea {
     cursor: pointer;
     padding-right: 10px;
     float: right;
+}
+
+.bottom {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    /* Moves the element to the right side */
+    background-color: #fff;
+    padding: 10px 50px;
+    border-top: solid 1px #333;
+    width: 70%;
+    box-sizing: border-box;
+    z-index: 500;
 }
