@@ -41,11 +41,12 @@ function postMonth() {
         });
 }
 
-function generate(startDate, endDate, frequency) {
-    console.log("Inside generateSchedule Function"); // Debugging
+function generate(startDate, endDate, frequency, exceptions = []) {
+    console.log("Inside generateSchedule Function");
     console.log("Start Date:", startDate);
     console.log("End Date:", endDate);
     console.log("Frequency:", frequency);
+    console.log("Exceptions:", exceptions);
 
     if (!startDate || !endDate) {
         console.error("Invalid startDate or endDate!");
@@ -58,21 +59,25 @@ function generate(startDate, endDate, frequency) {
 
     while (currentDate <= lastDate) {
         let dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
+        let dateStr = currentDate.toISOString().split("T")[0];
 
-        if (frequency === "daily") {
-            scheduleDates.push(currentDate.toISOString().split("T")[0]);
-        } else if (frequency === "weekday" && dayOfWeek !== 0 && dayOfWeek !== 6) {
-            scheduleDates.push(currentDate.toISOString().split("T")[0]);
-        } else if (frequency === "3x_week" && [1, 3, 5].includes(dayOfWeek)) {
-            scheduleDates.push(currentDate.toISOString().split("T")[0]);
+        if (!exceptions.includes(dateStr)) {
+            if (frequency === "daily") {
+                scheduleDates.push(dateStr);
+            } else if (frequency === "weekday" && dayOfWeek !== 0 && dayOfWeek !== 6) {
+                scheduleDates.push(dateStr);
+            } else if (frequency === "3x_week" && [1, 3, 5].includes(dayOfWeek)) {
+                scheduleDates.push(dateStr);
+            }
         }
 
         currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    console.log("Generated Schedule Dates:", scheduleDates); // Debugging output
+    console.log("Generated Schedule Dates (without exceptions):", scheduleDates);
     return scheduleDates;
 }
+
 
 
 function getFlatpickrDate(inputId) {
@@ -119,6 +124,15 @@ function postPatientAndSchedule() {
             let dateStart = getFlatpickrDate("date_start");
             let dateEnd = getFlatpickrDate("date_end");
             let frequency = document.getElementById("schedule").value;
+            let exceptionDates = [];
+
+            const exceptionsPicker = document.getElementById("exceptions")._flatpickr;
+            if (exceptionsPicker) {
+                exceptionDates = exceptionsPicker.selectedDates.map(date =>
+                    date.toISOString().split("T")[0]
+                );
+            }
+
 
             if (!patientId || !dateStart || !dateEnd) {
                 alert("Vyplňte všetky povinné polia!");
@@ -129,7 +143,7 @@ function postPatientAndSchedule() {
             let year = dateObj.getFullYear();
             let month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
 
-            let schedule = generate(dateStart, dateEnd, frequency);
+            let schedule = generate(dateStart, dateEnd, frequency, exceptionDates);
 
             let scheduleData = {
                 sestra: document.getElementById("nurse_id").value,

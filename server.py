@@ -326,8 +326,6 @@ def generate_schedule():
         if not request.is_json:
             return jsonify({"error": "Invalid request format, expected JSON"}), 400
 
-
-        print("hallopooo")
         data = request.get_json()
         patient_id = data.get("patient_id")
         nalez = data.get("nalez", "")
@@ -500,8 +498,9 @@ def search_patient():
         cursor.execute("""
             SELECT id, meno, rodne_cislo, adresa, poistovna, sestra, ados, nalez, osetrenie, vedlajsie_osetrenie, koniec_mesiaca, cislo_dekurzu
             FROM pacienti
-            WHERE meno LIKE ? OR rodne_cislo LIKE ?
-        """, (f"%{query}%", f"%{query}%"))
+            WHERE LOWER(meno) LIKE ? OR LOWER(rodne_cislo) LIKE ?
+        """, (f"%{query.lower()}%", f"%{query.lower()}%"))
+
 
         results = []
         for row in cursor.fetchall():
@@ -692,56 +691,56 @@ def insert_schedule():
         year = data.get("year")
         month = data.get("month")
         schedule_dates = data.get("schedule")
-        nurse = data.get("sestra")
+        nurse_id = data.get("sestra")
 
         if not patient_id or not year or not month or not schedule_dates:
             return jsonify({"error": "Missing required data"}), 400
 
-        # Get the month ID
+        # Get the month ID for this nurse and month
         cursor.execute("""
             SELECT id FROM mesiac 
             WHERE mesiac = ? AND rok = ? AND sestra_id = ?
-        """, (month, year, nurse))
-        mesiac_id_row = cursor.fetchone()
+        """, (month, year, nurse_id))
+        mesiac_row = cursor.fetchone()
 
-        if not mesiac_id_row:
+        if not mesiac_row:
             return jsonify({"error": "Mesiac not found"}), 404
 
-        mesiac_id = mesiac_id_row["id"]
+        mesiac_id = mesiac_row["id"]
 
+        # Get all dni (days) for this mesiac
         cursor.execute("""
-            SELECT id, strftime('%Y-%m-%d', datum) AS datum FROM dni
+            SELECT id, strftime('%Y-%m-%d', datum) AS datum 
+            FROM dni 
             WHERE mesiac = ?
         """, (mesiac_id,))
-        
         dni_records = {row["datum"]: row["id"] for row in cursor.fetchall()}
 
+        # Delete any existing schedule for this patient in this month
         cursor.execute("""
             DELETE FROM den_pacient 
-            WHERE pacient_id = ? AND den_id IN (
-                SELECT id FROM dni WHERE mesiac = ?
-            )
+            WHERE pacient_id = ? 
+              AND den_id IN (SELECT id FROM dni WHERE mesiac = ?)
         """, (patient_id, mesiac_id))
 
+        # Insert new schedule
         inserted_days = []
         for schedule_date in schedule_dates:
-            if schedule_date in dni_records:
-                den_id = dni_records[schedule_date]
-
+            den_id = dni_records.get(schedule_date)
+            if den_id:
                 cursor.execute("""
                     INSERT INTO den_pacient (den_id, pacient_id)
                     VALUES (?, ?)
                 """, (den_id, patient_id))
-                
-                inserted_days.append(den_id) 
+                inserted_days.append(den_id)
 
         conn.commit()
         conn.close()
 
         if inserted_days:
-            first_day = min(inserted_days)
+            first_day_id = min(inserted_days)
             return jsonify({
-                "redirect": url_for("detail", nurse_id=nurse, year=year, month=month, day=first_day)
+                "redirect": url_for("detail", nurse_id=nurse_id, year=year, month=month, day=first_day_id)
             })
         else:
             return jsonify({"error": "No valid schedule dates found"}), 400
@@ -866,6 +865,7 @@ def detail(nurse_id, year, month, day):
                     JOIN dni ON den_pacient.den_id = dni.id
                     WHERE dni.mesiac = ?
                     GROUP BY pacienti.id
+                    ORDER BY pacienti.meno;
                 """, (month_data["id"],))
 
                 patients_in_month = [dict(row) for row in cursor.fetchall()]
@@ -1026,7 +1026,6 @@ def update_pacienti_table():
             """)
 
         conn.commit()
-
 
 
 

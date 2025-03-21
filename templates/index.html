@@ -98,16 +98,20 @@
 
             <div class="section" id="patient-section">
                 <h2 class="lined-heading"><span>Pacient</span></h2>
+                
                 <div class="form-group">
                     <label for="rodne_cislo">Rodné číslo</label>
-                    <input type="text" id="rodne_cislo" name="rodne_cislo" maxlength="11" oninput="searchPatient()" autocomplete="off" required>
-                    <div id="suggestions" class="suggestions"></div>
+                    <input type="text" id="rodne_cislo" name="rodne_cislo" maxlength="11" oninput="searchPatient(this)"
+                        autocomplete="off" required>
+                    <div id="suggestions_rc" class="suggestions"></div>
                 </div>
-
+                
                 <div class="form-group">
                     <label for="meno">Meno</label>
-                    <input type="text" id="meno" name="meno" required>
+                    <input type="text" id="meno" name="meno" oninput="searchPatient(this)" autocomplete="off" required>
+                    <div id="suggestions_name" class="suggestions"></div>
                 </div>
+
                 
                 <div class="form-group">
                     <label for="adresa">Adresa</label>
@@ -156,6 +160,11 @@
                     </select>
                 </div>
 
+                <div class="form-group">
+                    <label for="exceptions">Výnimky</label>
+                    <input class="dates" type="text" id="exceptions" placeholder="Vyberte dátumy" autocomplete="off">
+                </div>
+
                 <div class="one-line">
                     <button class="btn warning" onclick="clearInputs()">Vymazať</button>
                     <button class="btn" onclick="postPatientAndSchedule(); clearInputs(); updatePatientList(days[0].datum);">Pridať</button>
@@ -200,6 +209,8 @@
 
         <div class="right container">
             <div class="section" id="dekurz-section">
+                <h2 class="lined-heading"><span>Pacienti v mesiaci</span></h2>
+
                 <div class="scroll">
                     {% for patient in patients_in_month %}
                     <button class="small-token" data-id="{{ patient.id }}">
@@ -310,20 +321,19 @@
         }, 500);
     }
 
-    function searchPatient() {
-        let input = document.getElementById("rodne_cislo").value.trim();
-        let suggestionsBox = document.getElementById("suggestions");
+    function searchPatient(inputElement) {
+        const inputValue = inputElement.value.trim();
+        const isSearchingByRC = inputElement.id === "rodne_cislo";
+        const suggestionsBox = document.getElementById(isSearchingByRC ? "suggestions_rc" : "suggestions_name");
 
-        if (input.length < 3) {
+        if (inputValue.length < 3) {
             suggestionsBox.style.display = "none";
             return;
         }
 
-        fetch(`/search_patient?query=${encodeURIComponent(input)}`)
+        fetch(`/search_patient?query=${encodeURIComponent(inputValue)}&by=${isSearchingByRC ? "rc" : "name"}`)
             .then(response => {
-                if (!response.ok) {
-                    throw new Error("Chyba pri načítaní údajov.");
-                }
+                if (!response.ok) throw new Error("Chyba pri načítaní údajov.");
                 return response.json();
             })
             .then(data => {
@@ -333,19 +343,22 @@
                 }
 
                 suggestionsBox.innerHTML = "";
+
                 if (data.length === 0) {
                     suggestionsBox.style.display = "none";
                     return;
                 }
 
                 data.forEach(patient => {
-                    let div = document.createElement("div");
+                    const div = document.createElement("div");
                     div.textContent = `${patient.rc} - ${patient.name} - ${patient.address}`;
                     div.classList.add("suggestion-item");
 
                     div.onclick = function () {
                         document.getElementById("rodne_cislo").value = patient.rc;
+                        document.getElementById("meno").value = patient.name;
                         suggestionsBox.style.display = "none";
+                        document.getElementById(isSearchingByRC ? "suggestions_name" : "suggestions_rc").style.display = "none";
                         fillPatientDetails(patient);
                     };
 
@@ -365,6 +378,23 @@
         document.getElementById("adresa").value = patient.address;
         setSelectValue("poistovna", patient.insurance);
         setSelectValue("company", patient.company);
+
+        let firstDayDate = new Date(year, month - 1, 1);
+        firstDayDate.setDate(firstDayDate.getDate() + 1);
+        let firstDay = firstDayDate.toISOString().split('T')[0];
+
+        let lastDayDate = new Date(year, month, 0);
+        lastDayDate.setDate(lastDayDate.getDate() + 1);
+        let lastDay = lastDayDate.toISOString().split('T')[0];
+
+        // Set values in Flatpickr
+        if (window.flatpickr) {
+            flatpickr("#date_start", { defaultDate: firstDay });
+            flatpickr("#date_end", { defaultDate: lastDay });
+        } else {
+            document.getElementById("date_start").value = firstDay;
+            document.getElementById("date_end").value = lastDay;
+        }
     }
 
     function setSelectValue(selectId, value) {
@@ -666,6 +696,19 @@
                 firstDayOfWeek: 1
             }
         });
+
+        flatpickr("#exceptions", {
+            mode: "multiple",
+            dateFormat: "d-m-Y",
+            enableTime: false,
+            disableMobile: false,
+            allowInput: true,
+            minDate: firstDay,
+            maxDate: lastDay,
+            locale: {
+                firstDayOfWeek: 1
+            }
+        });
     }
 
     function fetchSuggestions() {
@@ -826,7 +869,7 @@
         let startTime = new Date(`1970-01-01T${startTimeInput}:00`);
         let writeStartTime = new Date(`1970-01-01T${writeStartTimeInput}:00`);
 
-        const waitTime = 20;
+        const waitTime = 10;
         const writeTimeIncrease = 5;
 
         let totalTime = 0;
@@ -999,16 +1042,19 @@
     });
     
     async function schedulePatientsMonth() {
+        console.log("🔍 Starting schedulePatientsMonth");
+        console.log("📅 patients_by_day:", patients_by_day);
+
         const loader = document.getElementById("loader");
         loader.classList.add("loader-active");
 
-        let customRouteCheckbox = document.getElementById("custom-route");
-        let startAddress = document.getElementById("start").value;
-        let startCoords = await geocodeAddress(startAddress);
-        let sestra_id = document.getElementById("nurse_id").value;
+        const customRouteCheckbox = document.getElementById("custom-route");
+        const startAddress = document.getElementById("start").value;
+        const sestra_id = document.getElementById("nurse_id").value;
+        const startCoords = await geocodeAddress(startAddress);
 
         if (!startCoords) {
-            console.warn("Invalid start location.");
+            console.warn("⚠️ Invalid start location.");
             loader.classList.remove("loader-active");
             return;
         }
@@ -1016,14 +1062,15 @@
         let generatedSchedule = [];
 
         for (let day of days) {
-            let selectedDate = day.datum;
-            let waypoints = [];
+            const selectedDate = day.datum;
+            console.log(`📆 Processing date: ${selectedDate}`);
 
             if (!patients_by_day[selectedDate] || patients_by_day[selectedDate].length === 0) {
-                console.warn(`No patients scheduled for ${selectedDate}.`);
+                console.warn(`⚠️ No patients scheduled for ${selectedDate}`);
                 continue;
             }
 
+            let waypoints = [];
             let originalWaypoints = [];
 
             for (let patient of patients_by_day[selectedDate]) {
@@ -1034,26 +1081,29 @@
                     let waypoint = { location: address, patient_id: patient.patient_id };
                     waypoints.push({ location: address });
                     originalWaypoints.push(waypoint);
+                } else {
+                    console.warn(`⚠️ Failed to geocode patient ${patient.patient_id}: ${address}`);
                 }
             }
 
             if (waypoints.length === 0) {
-                console.warn(`No valid addresses for ${selectedDate}.`);
+                console.warn(`⚠️ No valid addresses for ${selectedDate}`);
                 continue;
             }
 
-            // 🔹 **Split into chunks of max 20 stops**
-            let routeChunks = splitWaypoints(waypoints, 20);
+            const routeChunks = splitWaypoints(waypoints, 20);
+            const originalChunks = splitWaypoints(originalWaypoints, 20);
+
             let previousEnd = startAddress;
-            let fullRouteLegs = [];
 
             for (let i = 0; i < routeChunks.length; i++) {
                 let segmentWaypoints = routeChunks[i];
+                let originalSegmentWaypoints = originalChunks[i];
 
                 let isLastSegment = (i === routeChunks.length - 1);
                 let segmentDestination = isLastSegment ? startAddress : segmentWaypoints.pop().location;
 
-                let request = {
+                const request = {
                     origin: previousEnd,
                     destination: segmentDestination,
                     waypoints: segmentWaypoints,
@@ -1061,18 +1111,25 @@
                     travelMode: google.maps.TravelMode.DRIVING
                 };
 
+                console.log(`📍 Requesting route for chunk ${i + 1}/${routeChunks.length} on ${selectedDate}`);
+                console.log("➡️  Waypoints:", segmentWaypoints.map(w => w.location));
+
                 await new Promise((resolve) => {
                     directionsService.route(request, async function (result, status) {
                         if (status === google.maps.DirectionsStatus.OK) {
-                            let optimizedWaypointsOrder = result.routes[0].waypoint_order;
-                            let reorderedWaypoints = optimizedWaypointsOrder.map(index => originalWaypoints[index]);
+                            console.log("✅ Route fetched successfully.");
 
-                            fullRouteLegs.push(...result.routes[0].legs); // 🔹 Merge legs into one list
+                            const optimizedOrder = result.routes[0].waypoint_order;
+                            const reorderedWaypoints = optimizedOrder.map(index => originalSegmentWaypoints[index]);
 
-                            let scheduleData = await processRouteTimes(fullRouteLegs, selectedDate, reorderedWaypoints);
+                            console.log("🔄 Reordered waypoints:", reorderedWaypoints.map(w => w.patient_id));
+
+                            const scheduleData = await processRouteTimes(result.routes[0].legs, selectedDate, reorderedWaypoints);
+                            console.log("🗓️  Schedule for chunk:", scheduleData);
+
                             generatedSchedule.push(...scheduleData);
                         } else {
-                            console.error(`Error fetching route for ${selectedDate}:`, status);
+                            console.error(`❌ Error fetching route for ${selectedDate}:`, status);
                         }
                         resolve();
                     });
@@ -1082,46 +1139,58 @@
             }
         }
 
+        console.log("📦 Final generatedSchedule:", generatedSchedule);
+
         setTimeout(() => {
             sendScheduleToBackend(generatedSchedule, sestra_id);
             loader.classList.remove("loader-active");
+            console.log("✅ Schedule sent to backend.");
         }, 3000);
     }
 
     async function processRouteTimes(legs, selectedDate, waypoints) {
-        let startTimeInput = document.getElementById("zs_start_time").value;
-        let writeStartTimeInput = document.getElementById("write_start_time").value;
+        let startTimeInput = document.getElementById("zs_start_time").value || "08:00";
+        let writeStartTimeInput = document.getElementById("write_start_time").value || "08:00";
 
         let startTime = new Date(`1970-01-01T${startTimeInput}:00`);
         let writeStartTime = new Date(`1970-01-01T${writeStartTimeInput}:00`);
 
-        const waitTime = 20;
+        const waitTime = 10; // in minutes
         const writeTimeIncrease = 5;
+        const fallbackDurationMin = 15;
 
         let scheduleData = [];
 
         legs.forEach((leg, index) => {
             if (!waypoints[index]) {
-                console.warn(`Missing waypoint for leg ${index}`);
+                console.warn(`⚠️ Missing waypoint for leg ${index}`);
                 return;
             }
 
             let patientId = waypoints[index].patient_id;
 
             function getRandomTimeOffset() {
-                return Math.floor(Math.random() * 31) - 30;
+                return Math.floor(Math.random() * 31) - 15; // -15 to +15 min
             }
 
-            let arrivalTime = new Date(startTime);
-            arrivalTime.setMinutes(arrivalTime.getMinutes() + Math.round(leg.duration.value / 60) + getRandomTimeOffset());
+            let legDurationSec = leg?.duration?.value ?? fallbackDurationMin * 60;
+            if (leg?.duration == null) {
+                console.warn(`⚠️ Missing leg.duration for leg ${index}. Using fallback (${fallbackDurationMin} min).`);
+            }
 
+            // Calculate arrival time
+            let arrivalTime = new Date(startTime);
+            arrivalTime.setMinutes(arrivalTime.getMinutes() + Math.round(legDurationSec / 60) + getRandomTimeOffset());
+
+            // Calculate write time
             let patientWriteTime = new Date(writeStartTime);
             patientWriteTime.setMinutes(patientWriteTime.getMinutes() + writeTimeIncrease + getRandomTimeOffset());
 
             let formattedArrivalTime = `${arrivalTime.getHours().toString().padStart(2, "0")}:${arrivalTime.getMinutes().toString().padStart(2, "0")}`;
             let formattedWriteTime = `${patientWriteTime.getHours().toString().padStart(2, "0")}:${patientWriteTime.getMinutes().toString().padStart(2, "0")}`;
 
-            startTime.setMinutes(startTime.getMinutes() + Math.round(leg.duration.value / 60) + waitTime);
+            // Update times for next patient
+            startTime.setMinutes(startTime.getMinutes() + Math.round(legDurationSec / 60) + waitTime);
             writeStartTime.setMinutes(writeStartTime.getMinutes() + writeTimeIncrease);
 
             scheduleData.push({
@@ -1136,6 +1205,7 @@
     }
 
     function sendScheduleToBackend(scheduleData, sestra_id) {
+        console.log(scheduleData)
         fetch("/update_schedule", {
             method: "POST",
             headers: {
