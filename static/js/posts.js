@@ -123,6 +123,8 @@ function postPatientAndSchedule() {
             let patientId = data.patient_id;
             let dateStart = getFlatpickrDate("date_start");
             let dateEnd = getFlatpickrDate("date_end");
+            console.log("startDate:", dateStart);
+            console.log("endDate:", dateEnd)
             let frequency = document.getElementById("schedule").value;
             let exceptionDates = [];
 
@@ -132,9 +134,6 @@ function postPatientAndSchedule() {
                     date.toLocaleDateString("sv-SE")
                 );
             }
-
-            console.log("exceptions:", exceptionDates)
-
 
             if (!patientId || !dateStart || !dateEnd) {
                 alert("Vyplňte všetky povinné polia!");

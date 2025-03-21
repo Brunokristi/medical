@@ -16,14 +16,14 @@ import sqlite3
 from datetime import datetime, timedelta
 import calendar
 from reportlab.lib.utils import simpleSplit
-from flask_socketio import SocketIO
 import json
 import signal
+import unicodedata
+
 
 
 app = Flask(__name__)
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
 
 DATABASE_FILE = "ados_database.db"
 app.secret_key = "a3f8d3e87b5a4e5f9c6d4b2f6a1e8c3d"
@@ -41,6 +41,13 @@ def replace_slovak_chars(text):
 
 def split_by_chars(text, char_limit):
     return [text[i:i + char_limit] for i in range(0, len(text), char_limit)]
+
+
+def normalize_str(s):
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', s)
+        if unicodedata.category(c) != 'Mn'
+    ).lower()
 
 def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number):
     if os.name == "nt":  # Windows
@@ -85,7 +92,6 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
         c.drawString(55, height - 90, replace_slovak_chars(company_details[1]))
         c.drawString(55, height - 105, replace_slovak_chars(company_details[2]))
 
-        # Patient details
         c.drawString(55, height - 120, replace_slovak_chars("Meno, priezvisko, titul pacienta/pacientky:"))
         c.drawString(400, height - 120, replace_slovak_chars("Rodné číslo:"))
 
@@ -423,9 +429,15 @@ def generate_schedule():
 
         final_schedule = []
         for date, arrival_time, write_time in schedule_entries:
-            combined_text = "\n".join(text_by_date.get(date, []))
-            if nalez:  
-                combined_text = nalez + "\n" + combined_text  # Add main text to every date
+            combined_text = "\n".join(text_by_date.get(date, [])).strip()
+
+            # Skip this day if there's no combined text at all
+            if not combined_text:
+                print(f"⏭️ Skipping {date} — no content for the day.")
+                continue
+
+            if nalez:
+                combined_text = nalez + "\n" + combined_text
 
             final_schedule.append([date, arrival_time, write_time, combined_text])
 
@@ -865,34 +877,63 @@ def detail(nurse_id, year, month, day):
                     JOIN dni ON den_pacient.den_id = dni.id
                     WHERE dni.mesiac = ?
                     GROUP BY pacienti.id
-                    ORDER BY pacienti.meno;
                 """, (month_data["id"],))
 
                 patients_in_month = [dict(row) for row in cursor.fetchall()]
 
+                patients_in_month.sort(key=lambda p: normalize_str(p["meno"]))
+
                 
 
                 cursor.execute("""
-                    SELECT dni.datum AS day_date, pacienti.id AS patient_id, pacienti.meno AS patient_name, pacienti.adresa AS patient_adresa, pacienti.rodne_cislo, *
-                    FROM pacienti
-                    JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
-                    JOIN dni ON den_pacient.den_id = dni.id
-                    WHERE dni.mesiac = ?
-                    ORDER BY dni.datum
-                """, (month_data["id"],))
+                SELECT dni.datum AS day_date, pacienti.id AS patient_id, pacienti.meno AS patient_name, 
+                    pacienti.adresa AS patient_adresa, pacienti.rodne_cislo, *
+                FROM pacienti
+                JOIN den_pacient ON pacienti.id = den_pacient.pacient_id
+                JOIN dni ON den_pacient.den_id = dni.id
+                WHERE dni.mesiac = ?
+                ORDER BY dni.datum
+            """, (month_data["id"],))
 
-                patients_by_day = {}
-                for row in cursor.fetchall():
-                    day_date = row["day_date"]
-                    patient_data = {
-                        "patient_id": row["patient_id"],
-                        "patient_rc": row["rodne_cislo"],
-                        "patient_name": row["patient_name"],
-                        "patient_address": row["patient_adresa"]
-                    }
-                    if day_date not in patients_by_day:
-                        patients_by_day[day_date] = []
-                    patients_by_day[day_date].append(patient_data)
+            rows = cursor.fetchall()
+
+            # Step 1: Collect all visit dates per patient
+            patient_dates = {}
+            for row in rows:
+                pid = row["patient_id"]
+                date = row["day_date"]
+                if pid not in patient_dates:
+                    patient_dates[pid] = []
+                patient_dates[pid].append(date)
+
+            # Step 2: Compute min/max per patient
+            date_ranges = {
+                pid: {
+                    "min_date": min(dates),
+                    "max_date": max(dates)
+                }
+                for pid, dates in patient_dates.items()
+            }
+
+            # Step 3: Build patients_by_day using the final min/max
+            patients_by_day = {}
+            for row in rows:
+                day_date = row["day_date"]
+                patient_id = row["patient_id"]
+
+                patient_data = {
+                    "patient_id": patient_id,
+                    "patient_rc": row["rodne_cislo"],
+                    "patient_name": row["patient_name"],
+                    "patient_address": row["patient_adresa"],
+                    "min_date": date_ranges[patient_id]["min_date"],
+                    "max_date": date_ranges[patient_id]["max_date"]
+                }
+
+                if day_date not in patients_by_day:
+                    patients_by_day[day_date] = []
+                patients_by_day[day_date].append(patient_data)
+
 
         conn.close()
 

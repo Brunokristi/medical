@@ -317,26 +317,23 @@ textarea {
     scroll-behavior: smooth;
 }
 
-::-webkit-scrollbar {
-    width: 3px;
-    /* Adjust width for vertical scrollbar */
-    height: 3px;
-    /* Adjust height for horizontal scrollbar */
+.active-patient {
+    background-color: #333;
 }
 
-/* Minimalist scrollbar track */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
 ::-webkit-scrollbar-track {
     background: transparent;
-    /* Make track invisible */
 }
 
-/* Minimalist scrollbar thumb (the moving part) */
 ::-webkit-scrollbar-thumb {
     background: #333;
-    /* Light gray thumb */
 }
 
-/* Change thumb color on hover */
 ::-webkit-scrollbar-thumb:hover {
     background: #333;
 }
@@ -515,6 +512,19 @@ textarea {
     padding: 10px 50px;
     border-top: solid 1px #333;
     width: 70%;
+    box-sizing: border-box;
+    z-index: 500;
+}
+
+.bottom-right {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    background-color: #fff;
+    padding: 10px 50px;
+    border-top: solid 1px #333;
+    border-right: solid 1px #333;
+    width: 30%;
     box-sizing: border-box;
     z-index: 500;
 }

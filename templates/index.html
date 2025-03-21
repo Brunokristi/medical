@@ -142,11 +142,11 @@
                 <div class="half-form-group">
                     <div class="form-group">
                         <label for="date_start">Poskytovanie ZS</label>
-                        <input class="dates" type="text" id="date_start" name="date_start" placeholder="Vyberte dátum" autocomplete="off">
+                        <input class="dates" type="text" id="date_start" name="date_start" placeholder="Dátum od" autocomplete="off">
                     </div>
                 
                     <div class="form-group">
-                        <input class="dates" type="text" id="date_end" name="date_end" placeholder="Vyberte dátum" autocomplete="off">
+                        <input class="dates" type="text" id="date_end" name="date_end" placeholder="Dátum do" autocomplete="off">
                     </div>
                 </div>
 
@@ -171,7 +171,7 @@
                 </div>
             </div>
 
-            <div class="section" id="route-section">
+            <div class="section" id="route-section" style="margin-bottom: 90px;">
                 <h2 class="lined-heading"><span>Plánovanie cesty<span></h2>
 
                 <div class="one-line">
@@ -202,7 +202,9 @@
                 </div>
 
                 <table  class="route-table" id="route-info"></table>
+            </div>
 
+            <div class="bottom-right">
                 <button class="btn" onclick="schedulePatientsMonth()">Uložiť rozpis mesiaca</button>
             </div>
         </div>
@@ -385,7 +387,7 @@
 
         let lastDayDate = new Date(year, month, 0);
         lastDayDate.setDate(lastDayDate.getDate() + 1);
-        let lastDay = lastDayDate.toISOString().split('T')[0];
+        let lastDay = lastDayDate.toISOString().split('T')[0];''
 
         // Set values in Flatpickr
         if (window.flatpickr) {
@@ -439,45 +441,47 @@
         });
 
         function updateTokens() {
-            let container = document.getElementById(selectedDatesContainerId);
-            container.innerHTML = "";
+        let container = document.getElementById(selectedDatesContainerId);
+        container.innerHTML = "";
 
-            selectedDates.forEach(date => {
-                date = formatDate(d);
-                let token = document.createElement("div");
-                token.classList.add("token");
-                token.textContent = date;
+        selectedDates.forEach(date => {
+            date = formatDate(d);
+            let token = document.createElement("div");
+            token.classList.add("token");
+            token.textContent = date;
 
-                let removeBtn = document.createElement("button");
-                removeBtn.textContent = "×";
-                removeBtn.onclick = function () {
-                    selectedDates = selectedDates.filter(d => d !== date);
-                    updateTokens();
-                };
+            let removeBtn = document.createElement("button");
+            removeBtn.textContent = "×";
+            removeBtn.onclick = function () {
+                selectedDates = selectedDates.filter(d => d !== date);
+                updateTokens();
+            };
 
-                token.appendChild(removeBtn);
-                container.appendChild(token);
-            });
+            token.appendChild(removeBtn);
+            container.appendChild(token);
+        });
 
-            document.getElementById(hiddenInputId).value = selectedDates.join(",");
-        }
-
-        function formatDate(dateString) {
-            let date = new Date(dateString);
-            if (isNaN(date)) return dateString; // Fallback if invalid date
-
-            let day = String(date.getDate()).padStart(2, '0');
-            let month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-based
-            let year = date.getFullYear();
-
-            return `${day}.${month}.${year}`;
-        }
+        document.getElementById(hiddenInputId).value = selectedDates.join(",");
     }
+
+    function formatDate(dateString) {
+        let date = new Date(dateString);
+        if (isNaN(date)) return dateString; // Fallback if invalid date
+
+        let day = String(date.getDate()).padStart(2, '0');
+        let month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-based
+        let year = date.getFullYear();
+
+        return `${day}.${month}.${year}`;
+    }
+}
 
     function clearInputs() {
         document.getElementById("meno").value = "";
         document.getElementById("rodne_cislo").value = "";
         document.getElementById("adresa").value = "";
+        document.getElementById("date_start").value = "";
+        document.getElementById("date_end").value = "";
 
         setSelectValue(poistovna, "24 - DÔVERA zdravotná poisťovňa, a. s.");
         setSelectValue(schedule, "každý deň");
@@ -567,7 +571,12 @@
         patientList.innerHTML = "";
 
         if (patients_by_day[selectedDate]) {
-            patients_by_day[selectedDate].forEach(patient => {
+            // 🔤 Sort patients by name (locale-aware and case-insensitive)
+            const sortedPatients = [...patients_by_day[selectedDate]].sort((a, b) =>
+                a.patient_name.localeCompare(b.patient_name, 'sk', { sensitivity: 'base' })
+            );
+
+            sortedPatients.forEach(patient => {
                 let patientToken = document.createElement("div");
                 patientToken.classList.add("draggable", "token");
                 patientToken.setAttribute("draggable", "true");
@@ -577,6 +586,8 @@
                 patientToken.setAttribute("data-address", patient.patient_address);
                 patientToken.setAttribute("data-insurance", patient.insurance);
                 patientToken.setAttribute("data-company", patient.company);
+                patientToken.setAttribute("data-startDate", patient.min_date);
+                patientToken.setAttribute("data-endDate", patient.max_date);
                 patientToken.textContent = `${patient.patient_name}`;
 
                 // Add click event to populate inputs
@@ -586,6 +597,14 @@
                     document.getElementById("adresa").value = this.getAttribute("data-address");
                     setSelectValue("poistovna", this.getAttribute("data-insurance"));
                     setSelectValue("company", this.getAttribute("data-company"));
+                    if (window.flatpickr) {
+                        flatpickr("#date_start", { defaultDate: this.getAttribute("data-startDate") });
+                        flatpickr("#date_end", { defaultDate: this.getAttribute("data-endDate") });
+                    } else {
+                        document.getElementById("date_start").value = firstDay;
+                        document.getElementById("date_end").value = lastDay;
+                    }
+
                 });
 
                 // Create delete icon
@@ -593,13 +612,11 @@
                 deleteIcon.innerHTML = "X";
                 deleteIcon.classList.add("delete-icon");
 
-                // Delete event listener
                 deleteIcon.addEventListener("click", function (event) {
                     event.stopPropagation();
                     showDeletePopup(patientToken, patient.patient_id, selectedDate);
                 });
 
-                // Append delete icon to the patient token
                 patientToken.appendChild(deleteIcon);
                 patientList.appendChild(patientToken);
             });
@@ -763,8 +780,8 @@
             center: { lat: 48.3396, lng: 19.6677 },
             zoom: 10,
             disableDefaultUI: true,
-            zoomControl: true,
-            gestureHandling: "greedy"
+            gestureHandling: "cooperative",
+            scrollwheel: false
         });
 
         directionsService = new google.maps.DirectionsService();
@@ -1242,9 +1259,19 @@
             patientData[patient.id] = patient;
         });
 
+
+        
+
+
         patientButtons.forEach(button => {
             button.addEventListener("click", function () {
                 let patientId = this.getAttribute("data-id");
+
+                patientButtons.forEach(btn => {
+                    btn.classList.remove("active-patient");
+                });
+
+                this.classList.add("active-patient");
 
                 if (patientId in patientData) {
                     let patient = patientData[patientId];
