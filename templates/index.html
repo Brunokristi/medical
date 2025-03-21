@@ -381,22 +381,6 @@
         setSelectValue("poistovna", patient.insurance);
         setSelectValue("company", patient.company);
 
-        let firstDayDate = new Date(year, month - 1, 1);
-        firstDayDate.setDate(firstDayDate.getDate() + 1);
-        let firstDay = firstDayDate.toISOString().split('T')[0];
-
-        let lastDayDate = new Date(year, month, 0);
-        lastDayDate.setDate(lastDayDate.getDate() + 1);
-        let lastDay = lastDayDate.toISOString().split('T')[0];''
-
-        // Set values in Flatpickr
-        if (window.flatpickr) {
-            flatpickr("#date_start", { defaultDate: firstDay });
-            flatpickr("#date_end", { defaultDate: lastDay });
-        } else {
-            document.getElementById("date_start").value = firstDay;
-            document.getElementById("date_end").value = lastDay;
-        }
     }
 
     function setSelectValue(selectId, value) {
@@ -697,6 +681,7 @@
             allowInput: true,
             minDate: firstDay,
             maxDate: lastDay,
+            defaultDate: firstDay,
             locale: {
                 firstDayOfWeek: 1
             }
@@ -709,6 +694,7 @@
             allowInput: true,
             minDate: firstDay,
             maxDate: lastDay,
+            defaultDate: lastDay,
             locale: {
                 firstDayOfWeek: 1
             }
@@ -979,15 +965,40 @@
         return disallowedDays; // Return only the dates that are not allowed
     }
 
+    
+
     function setFlatpickrDatepickers() {
-        let firstDay = new Date(year, month - 1, 1);
-        let lastDay = new Date(year, month, 0);
+        function getAdjustedDate(date, disabledDays, direction = 1) {
+            const maxIterations = 31;
+            let d = new Date(date);
+            for (let i = 0; i < maxIterations; i++) {
+                const dateStr = d.toISOString().split("T")[0];
+                const isDisabled = disabledDays.some(disabled =>
+                    typeof disabled === "function"
+                        ? disabled(d)
+                        : (disabled instanceof Date
+                            ? disabled.toISOString().split("T")[0] === dateStr
+                            : disabled === dateStr)
+                );
+                if (!isDisabled) return d;
+                d.setDate(d.getDate() + direction);
+            }
+            return null;
+        }
+
+        let firstDayRaw = new Date(year, month - 1, 1);
+        let lastDayRaw = new Date(year, month, 0);
+
+        let patientId = document.getElementById("patient_input_id").value;
+        let disabledDays = getDisallowedDaysForPatient(patientId, patients_by_day, firstDayRaw, lastDayRaw);
+
+        let firstDay = getAdjustedDate(firstDayRaw, disabledDays, 1);
+        firstDay.setDate(firstDay.getDate() - 1);
+
+        let lastDay = getAdjustedDate(lastDayRaw, disabledDays, -1);
 
         document.getElementById("start_date_patient").value = firstDay.toLocaleDateString("sv-SE");
         document.getElementById("end_date_patient").value = lastDay.toLocaleDateString("sv-SE");
-
-        let patientId = document.getElementById("patient_input_id").value;
-        let disabledDays = getDisallowedDaysForPatient(patientId, patients_by_day, firstDay, lastDay);
 
         let datePickers = {};
 
@@ -1013,14 +1024,9 @@
             });
 
             function updateDateFields(index, selectedDates) {
-                let selectedValues = selectedDates.map(date => {
-                    let adjustedDate = new Date(date);
-                    adjustedDate.setDate(adjustedDate.getDate() + 1); // Add one day
-                    return adjustedDate.toISOString().split("T")[0]; // Convert to YYYY-MM-DD
-                });
-
-                let hiddenInput = document.getElementById(`dates_list_${index}`);
-                let copyPasteArea = document.getElementById(`copy_paste_dates_${index}`);
+                let selectedValues = selectedDates.map(date =>
+                    date.toISOString().split("T")[0] // Don't adjust the date!
+                );
 
                 hiddenInput.value = selectedValues.join(",");
                 copyPasteArea.value = selectedValues.join(", ");
