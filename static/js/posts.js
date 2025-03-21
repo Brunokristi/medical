@@ -129,9 +129,11 @@ function postPatientAndSchedule() {
             const exceptionsPicker = document.getElementById("exceptions")._flatpickr;
             if (exceptionsPicker) {
                 exceptionDates = exceptionsPicker.selectedDates.map(date =>
-                    date.toISOString().split("T")[0]
+                    date.toLocaleDateString("sv-SE")
                 );
             }
+
+            console.log("exceptions:", exceptionDates)
 
 
             if (!patientId || !dateStart || !dateEnd) {
