@@ -50,9 +50,9 @@ def normalize_str(s):
     ).lower()
 
 def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_worker, company, entry_number):
-    if os.name == "nt":  # Windows
+    if os.name == "nt":
         documents_path = os.path.join(os.environ["USERPROFILE"], "Desktop", "ADOS")
-    else:  # macOS/Linux
+    else:
         documents_path = os.path.expanduser("~/Desktop/ADOS")
 
     os.makedirs(documents_path, exist_ok=True)
@@ -69,7 +69,6 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
 
     def draw_header():
         c.setFont("Helvetica-Bold", 14)
-        
         title_text = replace_slovak_chars("DEKURZ OŠETROVATELSKEJ STAROSTLIVOSTI")
         title_width = c.stringWidth(title_text, "Helvetica-Bold", 14)
         c.drawString((width - title_width) / 2, height - 40, title_text)
@@ -77,7 +76,6 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
         c.setFont("Helvetica", 10)
         c.drawString(width - 200, height - 60, f"Poradové císlo strany dekurzu: {page_number}")
 
-        # Draw company information box
         c.setStrokeColor(colors.black)
         c.rect(50, height - 110, width - 100, 45, stroke=1, fill=0)
 
@@ -105,12 +103,10 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
         elif (poistovna == "27 – UNION zdravotná poisťovňa, a. s."):
             c.drawString(500, height - 140, replace_slovak_chars("27"))
 
-        # Draw separation lines
         c.rect(50, height - 150, width - 100, 40, stroke=1, fill=0)
         c.line(395, height - 150, 395, height - 110)
         c.rect(50, height - 185, width - 100, 35, stroke=1, fill=0)
 
-        # Draw table headers
         c.setFont("Helvetica", 10)
         c.drawString(55, height - 170, replace_slovak_chars("Dátum a"))
         c.drawString(55, height - 182, replace_slovak_chars("čas zápisu:"))
@@ -127,14 +123,20 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
     c.setFont("Helvetica", 10)
     y_position = height - 200
     page_margin = 50
-    bottom_limit = page_margin + 60  # Avoid printing too low
+    bottom_limit = page_margin + 100
 
     for date, zs_time, write_time, text in editable_schedule:
-        print(text)
-        text = replace_slovak_chars(zs_time + ": " + text)
-        c.setFont("Helvetica", 10)
+        text = zs_time + ": " + text
+        lines = text.split("\n")  # ✅ respect user-inserted newlines
+        wrapped_lines = []
 
-        # Check for new page
+        for line in lines:
+            wrapped = simpleSplit(line, "Helvetica", 10, 390)
+            wrapped_lines.extend(wrapped if wrapped else [""])
+
+        wrapped_lines = [replace_slovak_chars(line) for line in wrapped_lines]
+
+        # Page break if needed
         if y_position < bottom_limit:
             c.showPage()
             page_number += 1
@@ -144,8 +146,6 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
         c.drawString(55, y_position, date)
         c.drawString(55, y_position - 10, write_time)
 
-        # Wrap text correctly
-        wrapped_lines = simpleSplit(replace_slovak_chars(text), "Helvetica", 10, 400)
         for line in wrapped_lines:
             if y_position < bottom_limit:
                 c.showPage()
@@ -154,23 +154,21 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
                 y_position = height - 200
 
             c.drawString(150, y_position, line)
-            y_position -= 15  # Move down for next line
+            y_position -= 15
 
-        # Ensure new page if needed for signature
-        if y_position < 80:
+        # Signature section
+        if y_position < 100:
             c.showPage()
             page_number += 1
             draw_header()
             y_position = height - 200
 
-        # Nurse's Signature
         c.setFont("Helvetica-Bold", 10)
         c.drawString(150, y_position, name_worker)
         c.setFont("Helvetica", 10)
         c.drawString(300, y_position, "Podpis:")
-        y_position -= 20  # Move down
+        y_position -= 20
 
-        # Ensure new page if needed
         if y_position < 100:
             c.showPage()
             page_number += 1
@@ -179,10 +177,9 @@ def generate_pdf(editable_schedule, meno, rodne_cislo, adresa, poistovna, name_w
 
     c.save()
     print("PDF generated successfully!")
-    update_patient_db(rodne_cislo, str(page_number+1))
+    update_patient_db(rodne_cislo, str(page_number + 1))
     open_pdf(pdf_path)
     return pdf_path
-
 def open_pdf(pdf_path):
     if os.name == "nt":
         os.system(f'start "" "{pdf_path}"')
@@ -338,6 +335,8 @@ def generate_schedule():
         dekurz_text_0 = data.get("podtext_1", "")
         dates_list_0 = data.get("dates_list_1", []) if isinstance(data.get("dates_list_1"), list) else []
 
+        print("text dekurzu", dekurz_text_0)
+
         dekurz_text_1 = data.get("podtext_2", "")
         dates_list_1 = data.get("dates_list_2", []) if isinstance(data.get("dates_list_2"), list) else []
 
@@ -429,7 +428,7 @@ def generate_schedule():
 
         final_schedule = []
         for date, arrival_time, write_time in schedule_entries:
-            combined_text = "\n".join(text_by_date.get(date, [])).strip()
+            combined_text = "\n".join(text_by_date.get(date, []))
 
             # Skip this day if there's no combined text at all
             if not combined_text:
@@ -823,7 +822,7 @@ def update_schedule():
 
 def remove_newlines(data):
     if isinstance(data, str):
-        return data.replace("\n", " ").replace("\r", " ")
+        return data.replace("\r\n", "[NEWLINE]").replace("\n", "[NEWLINE]").replace("\r", "[NEWLINE]")
     elif isinstance(data, list):
         return [remove_newlines(item) for item in data]
     elif isinstance(data, dict):
@@ -926,6 +925,8 @@ def detail(nurse_id, year, month, day):
                     "patient_rc": row["rodne_cislo"],
                     "patient_name": row["patient_name"],
                     "patient_address": row["patient_adresa"],
+                    "insurance": row["poistovna"],
+                    "company": row["ados"],
                     "min_date": date_ranges[patient_id]["min_date"],
                     "max_date": date_ranges[patient_id]["max_date"]
                 }

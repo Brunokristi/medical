@@ -236,7 +236,7 @@
                 {% for i in range(1, 9) %}
                 <div class="form-group">
                     <label for="podtext-{{ i }}" style="margin-top: 30px;">Text Dekurzu {{ i }}</label>
-                    <textarea id="podtext-{{ i }}" name="podtext-{{ i }}" rows="5"></textarea>
+                    <textarea id="podtext-{{ i }}" name="podtext-{{ i }}" rows="15"></textarea>
                 </div>
                 
                 <div class="form-group">
@@ -246,7 +246,7 @@
                 
                         <input type="hidden" id="dates_list_{{ i }}" name="dates_list_{{ i }}">
                     
-                        <textarea id="copy_paste_dates_{{ i }}" class="copy-paste-dates" rows="1"
+                        <textarea id="copy_paste_dates_{{ i }}" class="copy-paste-dates" rows="4"
                             placeholder="Kopírujte dátumy sem"></textarea>
                     </div>
                 </div>
@@ -495,7 +495,7 @@
         }
     });
 
-    //zmena dni vpravo vlavo
+    //zmena dni vlavo
     document.addEventListener("DOMContentLoaded", function () {
         let selectedDateElement = document.getElementById("selectedDate");
         let prevButton = document.getElementById("prevDay");
@@ -681,20 +681,19 @@
             allowInput: true,
             minDate: firstDay,
             maxDate: lastDay,
-            defaultDate: firstDay,
             locale: {
                 firstDayOfWeek: 1
             }
         });
 
         flatpickr("#date_end", {
+            mode: "multiple",
             dateFormat: "d-m-Y",
             enableTime: false,
             disableMobile: false,
             allowInput: true,
             minDate: firstDay,
             maxDate: lastDay,
-            defaultDate: lastDay,
             locale: {
                 firstDayOfWeek: 1
             }
@@ -965,40 +964,15 @@
         return disallowedDays; // Return only the dates that are not allowed
     }
 
-    
-
     function setFlatpickrDatepickers() {
-        function getAdjustedDate(date, disabledDays, direction = 1) {
-            const maxIterations = 31;
-            let d = new Date(date);
-            for (let i = 0; i < maxIterations; i++) {
-                const dateStr = d.toISOString().split("T")[0];
-                const isDisabled = disabledDays.some(disabled =>
-                    typeof disabled === "function"
-                        ? disabled(d)
-                        : (disabled instanceof Date
-                            ? disabled.toISOString().split("T")[0] === dateStr
-                            : disabled === dateStr)
-                );
-                if (!isDisabled) return d;
-                d.setDate(d.getDate() + direction);
-            }
-            return null;
-        }
-
-        let firstDayRaw = new Date(year, month - 1, 1);
-        let lastDayRaw = new Date(year, month, 0);
-
-        let patientId = document.getElementById("patient_input_id").value;
-        let disabledDays = getDisallowedDaysForPatient(patientId, patients_by_day, firstDayRaw, lastDayRaw);
-
-        let firstDay = getAdjustedDate(firstDayRaw, disabledDays, 1);
-        firstDay.setDate(firstDay.getDate() - 1);
-
-        let lastDay = getAdjustedDate(lastDayRaw, disabledDays, -1);
+        let firstDay = new Date(year, month - 1, 1);
+        let lastDay = new Date(year, month, 0);
 
         document.getElementById("start_date_patient").value = firstDay.toLocaleDateString("sv-SE");
         document.getElementById("end_date_patient").value = lastDay.toLocaleDateString("sv-SE");
+
+        let patientId = document.getElementById("patient_input_id").value;
+        let disabledDays = getDisallowedDaysForPatient(patientId, patients_by_day, firstDay, lastDay);
 
         let datePickers = {};
 
@@ -1024,9 +998,14 @@
             });
 
             function updateDateFields(index, selectedDates) {
-                let selectedValues = selectedDates.map(date =>
-                    date.toISOString().split("T")[0] // Don't adjust the date!
-                );
+                let selectedValues = selectedDates.map(date => {
+                    let adjustedDate = new Date(date);
+                    adjustedDate.setDate(adjustedDate.getDate() + 1); // Add one day
+                    return adjustedDate.toISOString().split("T")[0]; // Convert to YYYY-MM-DD
+                });
+
+                let hiddenInput = document.getElementById(`dates_list_${index}`);
+                let copyPasteArea = document.getElementById(`copy_paste_dates_${index}`);
 
                 hiddenInput.value = selectedValues.join(",");
                 copyPasteArea.value = selectedValues.join(", ");
@@ -1298,7 +1277,7 @@
                     for (let i = 1; i <= 8; i++) {
                         let podtextField = document.getElementById(`podtext-${i}`);
                         if (podtextField) {
-                            podtextField.value = patient[`dekurz_text_${i - 1}`];
+                            podtextField.value = (patient[`dekurz_text_${i - 1}`] || "").replaceAll("[NEWLINE]", "\n");
                         }
                     }
 
@@ -1331,6 +1310,14 @@
     });
 
     async function updateForDekurz() {
+        if (
+            document.getElementById("entry_number").value === "" ||
+            document.getElementById("entry_number").value === null
+        ) {
+            alert("Vyplňte číslo dekurzu");
+        }
+
+
         let patientData = {
             patient_id: document.getElementById("patient_input_id").value,
             entry_number: document.getElementById("entry_number").value,
