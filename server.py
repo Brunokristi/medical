@@ -703,6 +703,9 @@ def insert_schedule():
         month = data.get("month")
         schedule_dates = data.get("schedule")
         nurse_id = data.get("sestra")
+        
+
+        print(schedule_dates)
 
         if not patient_id or not year or not month or not schedule_dates:
             return jsonify({"error": "Missing required data"}), 400

@@ -57,9 +57,13 @@ function generate(startDate, endDate, frequency, exceptions = []) {
     let currentDate = new Date(startDate);
     let lastDate = new Date(endDate);
 
+    // Normalize to midnight (local time)
+    currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+    lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+
     while (currentDate <= lastDate) {
-        let dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
-        let dateStr = currentDate.toISOString().split("T")[0];
+        const dayOfWeek = currentDate.getDay();
+        const dateStr = formatLocalDate(currentDate);
 
         if (!exceptions.includes(dateStr)) {
             if (frequency === "daily") {
@@ -78,22 +82,32 @@ function generate(startDate, endDate, frequency, exceptions = []) {
     return scheduleDates;
 }
 
+function formatLocalDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
 
 
 function getFlatpickrDate(inputId) {
     let picker = document.getElementById(inputId)?._flatpickr;
     if (picker && picker.selectedDates.length > 0) {
-        let selectedDate = picker.selectedDates[0]; // Get selected date without modification
+        // This is already a Date object in local time
+        let selectedDate = picker.selectedDates[0];
 
-        // Extract the correct year, month, and day
-        let year = selectedDate.getFullYear();
-        let month = String(selectedDate.getMonth() + 1).padStart(2, "0"); // Ensure two digits
-        let day = String(selectedDate.getDate()).padStart(2, "0"); // Ensure two digits
+        // Don't create a new Date or adjust time — just extract values directly
+        const year = selectedDate.getFullYear();
+        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(selectedDate.getDate()).padStart(2, '0');
 
         return `${year}-${month}-${day}`;
     }
     return null;
 }
+
+
 
 
 function postPatientAndSchedule() {
@@ -143,6 +157,8 @@ function postPatientAndSchedule() {
             let dateObj = new Date(dateStart);
             let year = dateObj.getFullYear();
             let month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
+
+            console.log("")
 
             let schedule = generate(dateStart, dateEnd, frequency, exceptionDates);
 
